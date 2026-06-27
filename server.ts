@@ -425,13 +425,11 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
     const form = new FormData();
-    form.append("product[name]", newProduct.title);
-    form.append("product[price]", Math.round(newProduct.price * 100));
-    form.append("product[description]", newProduct.description);
-    form.append("product[url]", newProduct.image_url);
-    form.append("product[is_physical]", "false");
-    form.append("product[preview_url]", newProduct.image_url);
-    form.append("product[custom_permalink]", `salvaged-${newProduct.id}`);
+    form.append("name", newProduct.title);
+    form.append("price_cents", Math.round(newProduct.price * 100));
+    form.append("description", newProduct.description);
+    form.append("preview_url", newProduct.image_url);
+    form.append("custom_permalink", `salvaged-${newProduct.id}`);
 
     const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", form, {
       timeout: 30000,
@@ -865,13 +863,11 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     await writeLogToFirestore("info", `Gumroad v2 API /v2/products endpointine canlı Multipart Form Data ile Axios POST isteği gönderiliyor...`, "MARKETPLACE");
 
     const form = new FormData();
-    form.append("product[name]", product.title);
-    form.append("product[price]", Math.round(product.price * 100));
-    form.append("product[description]", product.description);
-    form.append("product[url]", product.image_url);
-    form.append("product[is_physical]", "false");
-    form.append("product[preview_url]", product.image_url);
-    form.append("product[custom_permalink]", `salvaged-${product.id}`);
+    form.append("name", product.title);
+    form.append("price_cents", Math.round(product.price * 100));
+    form.append("description", product.description);
+    form.append("preview_url", product.image_url);
+    form.append("custom_permalink", `salvaged-${product.id}`);
 
     let targetLink = "";
 
