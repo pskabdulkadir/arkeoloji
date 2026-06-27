@@ -436,8 +436,9 @@ async function executeOtonomPipeline() {
       description: artifact.description || "Cyber-Archeologist"
     };
 
-    console.log("[DEBUG] Otonom - Gumroad'a giden final payload:", JSON.stringify(finalGumroadPayload));
-    await writeLogToFirestore("info", `[DEBUG] Otonom payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
+    console.log("[DEBUG] Otonom - Gumroad'a giden GERÇEK payload:", JSON.stringify(finalGumroadPayload));
+    console.log("[DEBUG] price_cents tipi:", typeof finalGumroadPayload.price_cents, "değer:", finalGumroadPayload.price_cents);
+    await writeLogToFirestore("info", `[DEBUG] Otonom GERÇEK payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
 
     const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
       timeout: 30000,
@@ -896,8 +897,9 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
         description: product.description || "Cyber-Archeologist"
       };
 
-      console.log("[DEBUG] Manual - Gumroad'a giden final payload:", JSON.stringify(finalGumroadPayload));
-      await writeLogToFirestore("info", `[DEBUG] Manual payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
+      console.log("[DEBUG] Manual - Gumroad'a giden GERÇEK payload:", JSON.stringify(finalGumroadPayload));
+      console.log("[DEBUG] price_cents tipi:", typeof finalGumroadPayload.price_cents, "değer:", finalGumroadPayload.price_cents);
+      await writeLogToFirestore("info", `[DEBUG] Manual GERÇEK payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
 
       const response = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
         timeout: 30000,
