@@ -439,11 +439,11 @@ async function executeOtonomPipeline() {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const formParams = new URLSearchParams();
-    formParams.append('name', artifact.name || "Siber Antika");
+    formParams.append('name', String(artifact.name || "Siber Antika"));
     formParams.append('price_cents', '990');
-    formParams.append('description', artifact.description || "Cyber-Archeologist");
+    formParams.append('description', String(artifact.description || "Cyber-Archeologist"));
 
-    console.log("[REAL-POST] Gumroad'a KESİN OLARAK x-www-form-urlencoded basılıyor!");
+    console.log("[FORCE-POST] Gumroad'a x-www-form-urlencoded GÖNDERİLİYOR!");
 
     const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
       headers: {
@@ -891,8 +891,6 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     // Adım 2: Wayback Machine üzerindeki orijinal canlı görsel URL'sini doğrudan pazar yerine ilet
     const storageUrl = await getDirectImageUrl(product.image_url, product.id);
 
-    await writeLogToFirestore("info", `Gumroad v2 API'ye JSON body ile POST isteği gönderiliyor...`, "MARKETPLACE");
-
     let targetLink = "";
 
     try {
@@ -905,11 +903,11 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const formParams = new URLSearchParams();
-      formParams.append('name', product.title || "Siber Antika");
+      formParams.append('name', String(product.title || "Siber Antika"));
       formParams.append('price_cents', '990');
-      formParams.append('description', product.description || "Cyber-Archeologist");
+      formParams.append('description', String(product.description || "Cyber-Archeologist"));
 
-      console.log("[REAL-POST] Gumroad'a KESİN OLARAK x-www-form-urlencoded basılıyor!");
+      console.log("[FORCE-POST] Gumroad'a x-www-form-urlencoded GÖNDERİLİYOR!");
 
       const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
