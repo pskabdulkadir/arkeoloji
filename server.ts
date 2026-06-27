@@ -438,13 +438,18 @@ async function executeOtonomPipeline() {
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    console.log("[CRITICAL-DEBUG] Gumroad API'sine şu an giden TEK VE GERÇEK veri:", JSON.stringify(nihaiTemizPayload));
-    await writeLogToFirestore("info", `[CRITICAL] Otonom gumroad payload: ${JSON.stringify(nihaiTemizPayload)}`, "SYSTEM");
+    const params = new URLSearchParams();
+    params.append('name', artifact.name || "Dial-up Archive");
+    params.append('price_cents', '990');
+    params.append('description', artifact.description || "Cyber-Archeologist Series");
 
-    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", nihaiTemizPayload, {
+    console.log("[CRITICAL-FIX] Gumroad'a URL Encoded Form verisi fırlatılıyor...");
+    await writeLogToFirestore("info", `[CRITICAL-FIX] Otonom - URL Form parametreleri gönderiliyor`, "SYSTEM");
+
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', params, {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/x-www-form-urlencoded"
       },
       timeout: 30000
     });
@@ -900,13 +905,18 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      console.log("[CRITICAL-DEBUG] Gumroad API'sine şu an giden TEK VE GERÇEK veri:", JSON.stringify(nihaiTemizPayload));
-      await writeLogToFirestore("info", `[CRITICAL] Manual gumroad payload: ${JSON.stringify(nihaiTemizPayload)}`, "SYSTEM");
+      const params = new URLSearchParams();
+      params.append('name', product.title || "Dial-up Archive");
+      params.append('price_cents', '990');
+      params.append('description', product.description || "Cyber-Archeologist Series");
 
-      const response = await axios.post("https://api.gumroad.com/v2/products", nihaiTemizPayload, {
+      console.log("[CRITICAL-FIX] Gumroad'a URL Encoded Form verisi fırlatılıyor...");
+      await writeLogToFirestore("info", `[CRITICAL-FIX] Manual - URL Form parametreleri gönderiliyor`, "SYSTEM");
+
+      const response = await axios.post('https://api.gumroad.com/v2/products', params, {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/x-www-form-urlencoded"
         },
         timeout: 30000
       });
