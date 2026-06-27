@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "Artifact": {
+      "title": "Artifact",
+      "description": "A digitally salvaged vintage or glitch art artifact from Wayback Machine.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "source_url": { "type": "string" },
+        "extracted_at": { "type": "string" },
+        "category": { "type": "string" },
+        "raw_content": { "type": "string" },
+        "is_analyzed": { "type": "boolean" },
+        "is_listed": { "type": "boolean" },
+        "confidence": { "type": "number" },
+        "image_url": { "type": "string" },
+        "source_image_url": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "analyzed", "listed"] }
+      },
+      "required": ["id", "name", "source_url", "extracted_at", "category", "raw_content", "is_analyzed", "is_listed", "confidence", "image_url", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A curated cyberpunk product listed on Gumroad.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artifact_id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image_url": { "type": "string" },
+        "marketplace_url": { "type": "string" },
+        "created_at": { "type": "string" },
+        "tags": { "type": "array" },
+        "is_listed": { "type": "boolean" },
+        "is_shared": { "type": "boolean" }
+      },
+      "required": ["id", "artifact_id", "title", "description", "price", "image_url", "marketplace_url", "created_at", "is_listed", "is_shared"]
+    },
+    "SystemLog": {
+      "title": "SystemLog",
+      "description": "An autonomous operations log entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "level": { "type": "string", "enum": ["info", "warn", "error"] },
+        "message": { "type": "string" },
+        "module": { "type": "string", "enum": ["SYSTEM", "DIGGER", "GEMINI", "MARKETPLACE", "TWITTER"] }
+      },
+      "required": ["id", "timestamp", "level", "message", "module"]
+    }
+  },
+  "firestore": {
+    "/artifacts/{artifactId}": {
+      "schema": "Artifact",
+      "description": "Rescued digital artifacts"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Curated digital art products"
+    },
+    "/logs/{logId}": {
+      "schema": "SystemLog",
+      "description": "System operation log events"
+    }
+  }
+}
