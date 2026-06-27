@@ -302,6 +302,11 @@ async function scrapeWaybackMachine(customUrl?: string): Promise<Artifact> {
 
 // Complete End-to-End Autonomous Pipeline Orchestrator
 async function executeOtonomPipeline() {
+  if (!db) {
+    console.error("Firebase not initialized. Cannot run pipeline.");
+    return;
+  }
+
   await writeLogToFirestore("info", "OTONOM BORU HATTI TETİKLENDİ: Wayback Scraper, Gemini Küratörü, Gumroad ve IPFS akışı başlıyor...", "SYSTEM");
   try {
     // Adım 1: Wayback Machine Üzerinden Siber-Antika Kazı
@@ -439,8 +444,8 @@ async function executeOtonomPipeline() {
       }
     });
 
-    if (!gumroadRes?.data?.product?.short_url) {
-      throw new Error(`Gumroad API geçerli bir ürün URL'si döndürmedi. Yanıt: ${JSON.stringify(gumroadRes?.data || {})}`);
+    if (!gumroadRes?.data?.product?.short_url || !gumroadRes?.data?.product?.id) {
+      throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes?.data || {})}`);
     }
 
     finalMarketplaceUrl = gumroadRes.data.product.short_url;
@@ -487,7 +492,7 @@ async function executeOtonomPipeline() {
         price: newProduct.price,
         created_at: newProduct.created_at
       }
-    });
+    }, { timeout: 30000 });
 
     const ipfsCid = ipfsRes.data?.Hash || ipfsRes.data?.cid;
     if (!ipfsCid) {
@@ -613,9 +618,19 @@ app.post("/api/logs/clear", async (req, res) => {
 app.post("/api/artifacts/dig-wayback", async (req, res) => {
   try {
     const { customUrl } = req.body;
+
+    if (customUrl && typeof customUrl !== 'string') {
+      return res.status(400).json({ error: "customUrl must be a string" });
+    }
+
+    if (customUrl && customUrl.length > 2048) {
+      return res.status(400).json({ error: "customUrl too long (max 2048 chars)" });
+    }
+
     const artifact = await scrapeWaybackMachine(customUrl);
     res.json({ success: true, artifact });
   } catch (err: any) {
+    await writeLogToFirestore("error", `Dig-wayback error: ${err.message}`, "DIGGER");
     res.status(500).json({ error: err.message });
   }
 });
@@ -636,6 +651,13 @@ app.post("/api/artifacts/curate-gemini/:id", async (req, res) => {
     }
 
     const artifact = artDoc.data() as Artifact;
+
+    if (artifact.is_analyzed) {
+      return res.status(400).json({
+        error: "Artifact zaten processed. Tekrar curate edemezsiniz.",
+        artifact
+      });
+    }
     await writeLogToFirestore("info", `Gemini Multimodal Sanat Küratörü işleme başladı: ${artifact.name}`, "GEMINI");
 
     // Dynamic product type selection and autonomous price segmentation
@@ -880,7 +902,7 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
         }
       });
 
-      if (response.data?.product?.short_url) {
+      if (response.data?.product?.short_url && response.data?.product?.id) {
         targetLink = response.data.product.short_url;
         const gumId = response.data.product.id;
         if (gumId) {
