@@ -430,16 +430,17 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", {
+    const gumroadPayload = {
       name: newProduct.title,
       price_cents: Math.round(newProduct.price * 100),
-      description: newProduct.description,
-      preview_url: newProduct.image_url,
-      custom_permalink: `salvaged-${newProduct.id}`
-    }, {
+      description: newProduct.description
+    };
+
+    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
       timeout: 30000,
       headers: {
-        "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
+        "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
+        "Content-Type": "application/json"
       }
     });
 
@@ -886,16 +887,17 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     let targetLink = "";
 
     try {
-      const response = await axios.post("https://api.gumroad.com/v2/products", {
+      const gumroadPayload = {
         name: product.title,
         price_cents: Math.round(product.price * 100),
-        description: product.description,
-        preview_url: product.image_url,
-        custom_permalink: `salvaged-${product.id}`
-      }, {
+        description: product.description
+      };
+
+      const response = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
         timeout: 30000,
         headers: {
-          "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
+          "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
+          "Content-Type": "application/json"
         }
       });
 
