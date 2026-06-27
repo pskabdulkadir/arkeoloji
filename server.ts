@@ -430,22 +430,23 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    const finalGumroadPayload = {
-      name: artifact.name || "Retro Hardware",
+    const nihaiTemizPayload = {
+      name: String(artifact.name || "Retro Hardware"),
       price_cents: 990,
-      description: artifact.description || "Cyber-Archeologist"
+      description: String(artifact.description || "Cyber-Archeologist Series")
     };
 
-    console.log("[DEBUG] Otonom - Gumroad'a giden GERÇEK payload:", JSON.stringify(finalGumroadPayload));
-    console.log("[DEBUG] price_cents tipi:", typeof finalGumroadPayload.price_cents, "değer:", finalGumroadPayload.price_cents);
-    await writeLogToFirestore("info", `[DEBUG] Otonom GERÇEK payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
-      timeout: 30000,
+    console.log("[CRITICAL-DEBUG] Gumroad API'sine şu an giden TEK VE GERÇEK veri:", JSON.stringify(nihaiTemizPayload));
+    await writeLogToFirestore("info", `[CRITICAL] Otonom gumroad payload: ${JSON.stringify(nihaiTemizPayload)}`, "SYSTEM");
+
+    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", nihaiTemizPayload, {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
         "Content-Type": "application/json"
-      }
+      },
+      timeout: 30000
     });
 
     if (!gumroadRes?.data?.product?.short_url || !gumroadRes?.data?.product?.id) {
@@ -891,22 +892,23 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     let targetLink = "";
 
     try {
-      const finalGumroadPayload = {
-        name: product.title || "Retro Hardware",
+      const nihaiTemizPayload = {
+        name: String(product.title || "Retro Hardware"),
         price_cents: 990,
-        description: product.description || "Cyber-Archeologist"
+        description: String(product.description || "Cyber-Archeologist Series")
       };
 
-      console.log("[DEBUG] Manual - Gumroad'a giden GERÇEK payload:", JSON.stringify(finalGumroadPayload));
-      console.log("[DEBUG] price_cents tipi:", typeof finalGumroadPayload.price_cents, "değer:", finalGumroadPayload.price_cents);
-      await writeLogToFirestore("info", `[DEBUG] Manual GERÇEK payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const response = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
-        timeout: 30000,
+      console.log("[CRITICAL-DEBUG] Gumroad API'sine şu an giden TEK VE GERÇEK veri:", JSON.stringify(nihaiTemizPayload));
+      await writeLogToFirestore("info", `[CRITICAL] Manual gumroad payload: ${JSON.stringify(nihaiTemizPayload)}`, "SYSTEM");
+
+      const response = await axios.post("https://api.gumroad.com/v2/products", nihaiTemizPayload, {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
           "Content-Type": "application/json"
-        }
+        },
+        timeout: 30000
       });
 
       if (response.data?.product?.short_url && response.data?.product?.id) {
