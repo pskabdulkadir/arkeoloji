@@ -430,16 +430,16 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    const gumroadPayload = {
-      name: artifact.name || "Siber Antika",
+    const finalGumroadPayload = {
+      name: artifact.name || "Retro Hardware",
       price_cents: 990,
-      description: artifact.category || "Siber-Arkeoloji Serisi"
+      description: artifact.description || "Cyber-Archeologist"
     };
 
-    console.log("[DEBUG] Gumroad'a giden ham paket:", JSON.stringify(gumroadPayload));
-    await writeLogToFirestore("info", `[DEBUG] Gumroad payload: ${JSON.stringify(gumroadPayload)}`, "SYSTEM");
+    console.log("[DEBUG] Otonom - Gumroad'a giden final payload:", JSON.stringify(finalGumroadPayload));
+    await writeLogToFirestore("info", `[DEBUG] Otonom payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
 
-    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
+    const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
       timeout: 30000,
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
@@ -890,16 +890,16 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     let targetLink = "";
 
     try {
-      const gumroadPayload = {
-        name: product.title || "Siber Antika",
+      const finalGumroadPayload = {
+        name: product.title || "Retro Hardware",
         price_cents: 990,
-        description: product.description || "Siber-Arkeoloji Serisi"
+        description: product.description || "Cyber-Archeologist"
       };
 
-      console.log("[DEBUG] Manual listing - Gumroad payload:", JSON.stringify(gumroadPayload));
-      await writeLogToFirestore("info", `[DEBUG] Manual payload: ${JSON.stringify(gumroadPayload)}`, "SYSTEM");
+      console.log("[DEBUG] Manual - Gumroad'a giden final payload:", JSON.stringify(finalGumroadPayload));
+      await writeLogToFirestore("info", `[DEBUG] Manual payload: ${JSON.stringify(finalGumroadPayload)}`, "SYSTEM");
 
-      const response = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
+      const response = await axios.post("https://api.gumroad.com/v2/products", finalGumroadPayload, {
         timeout: 30000,
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
