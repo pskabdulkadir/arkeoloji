@@ -432,7 +432,7 @@ async function executeOtonomPipeline() {
 
     const gumroadPayload = {
       name: newProduct.title,
-      price_cents: Math.round(newProduct.price * 100),
+      price_cents: Number(990),
       description: newProduct.description
     };
 
@@ -889,7 +889,7 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     try {
       const gumroadPayload = {
         name: product.title,
-        price_cents: Math.round(product.price * 100),
+        price_cents: Number(990),
         description: product.description
       };
 
