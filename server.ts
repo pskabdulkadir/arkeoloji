@@ -431,10 +431,13 @@ async function executeOtonomPipeline() {
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
     const gumroadPayload = {
-      name: newProduct.title,
-      price_cents: Number(990),
-      description: newProduct.description
+      name: artifact.name || "Siber Antika",
+      price_cents: 990,
+      description: artifact.category || "Siber-Arkeoloji Serisi"
     };
+
+    console.log("[DEBUG] Gumroad'a giden ham paket:", JSON.stringify(gumroadPayload));
+    await writeLogToFirestore("info", `[DEBUG] Gumroad payload: ${JSON.stringify(gumroadPayload)}`, "SYSTEM");
 
     const gumroadRes = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
       timeout: 30000,
@@ -888,10 +891,13 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
     try {
       const gumroadPayload = {
-        name: product.title,
-        price_cents: Number(990),
-        description: product.description
+        name: product.title || "Siber Antika",
+        price_cents: 990,
+        description: product.description || "Siber-Arkeoloji Serisi"
       };
+
+      console.log("[DEBUG] Manual listing - Gumroad payload:", JSON.stringify(gumroadPayload));
+      await writeLogToFirestore("info", `[DEBUG] Manual payload: ${JSON.stringify(gumroadPayload)}`, "SYSTEM");
 
       const response = await axios.post("https://api.gumroad.com/v2/products", gumroadPayload, {
         timeout: 30000,
