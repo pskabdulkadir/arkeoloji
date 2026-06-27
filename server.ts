@@ -438,15 +438,14 @@ async function executeOtonomPipeline() {
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const params = new URLSearchParams();
-    params.append('name', artifact.name || "Dial-up Archive");
-    params.append('price_cents', '990');
-    params.append('description', artifact.description || "Cyber-Archeologist Series");
+    const formParams = new URLSearchParams();
+    formParams.append('name', artifact.name || "Siber Antika");
+    formParams.append('price_cents', '990');
+    formParams.append('description', artifact.description || "Cyber-Archeologist");
 
-    console.log("[CRITICAL-FIX] Gumroad'a URL Encoded Form verisi fırlatılıyor...");
-    await writeLogToFirestore("info", `[CRITICAL-FIX] Otonom - URL Form parametreleri gönderiliyor`, "SYSTEM");
+    console.log("[REAL-POST] Gumroad'a KESİN OLARAK x-www-form-urlencoded basılıyor!");
 
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', params, {
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
         "Content-Type": "application/x-www-form-urlencoded"
@@ -905,15 +904,14 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const params = new URLSearchParams();
-      params.append('name', product.title || "Dial-up Archive");
-      params.append('price_cents', '990');
-      params.append('description', product.description || "Cyber-Archeologist Series");
+      const formParams = new URLSearchParams();
+      formParams.append('name', product.title || "Siber Antika");
+      formParams.append('price_cents', '990');
+      formParams.append('description', product.description || "Cyber-Archeologist");
 
-      console.log("[CRITICAL-FIX] Gumroad'a URL Encoded Form verisi fırlatılıyor...");
-      await writeLogToFirestore("info", `[CRITICAL-FIX] Manual - URL Form parametreleri gönderiliyor`, "SYSTEM");
+      console.log("[REAL-POST] Gumroad'a KESİN OLARAK x-www-form-urlencoded basılıyor!");
 
-      const response = await axios.post('https://api.gumroad.com/v2/products', params, {
+      const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
           "Content-Type": "application/x-www-form-urlencoded"
