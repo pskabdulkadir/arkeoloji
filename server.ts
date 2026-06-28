@@ -430,20 +430,13 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    const nihaiTemizPayload = {
-      name: String(artifact.name || "Retro Hardware"),
-      price_cents: 990,
-      description: String(artifact.description || "Cyber-Archeologist Series")
-    };
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
+    // --- GUMROAD FORM POST ENFORCED ---
     const formParams = new URLSearchParams();
     formParams.append('name', String(artifact.name || "Siber Antika"));
     formParams.append('price_cents', '990');
-    formParams.append('description', String(artifact.description || "Cyber-Archeologist"));
+    formParams.append('description', String(artifact.description || "Cyber-Archeologist Series"));
 
-    console.log("[FORCE-POST] Gumroad'a x-www-form-urlencoded GÖNDERİLİYOR!");
+    console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi basılıyor!");
 
     const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
       headers: {
@@ -902,12 +895,13 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      // --- GUMROAD FORM POST ENFORCED ---
       const formParams = new URLSearchParams();
       formParams.append('name', String(product.title || "Siber Antika"));
       formParams.append('price_cents', '990');
-      formParams.append('description', String(product.description || "Cyber-Archeologist"));
+      formParams.append('description', String(product.description || "Cyber-Archeologist Series"));
 
-      console.log("[FORCE-POST] Gumroad'a x-www-form-urlencoded GÖNDERİLİYOR!");
+      console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi basılıyor!");
 
       const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
