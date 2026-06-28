@@ -360,14 +360,19 @@ export default function App() {
     }
   };
 
-  // Module 4: Gumroad upload (FULLY AUTONOMOUS - no manual intervention)
+  // Module 4: Gumroad upload (FULLY AUTONOMOUS - trigger the autonomous pipeline)
   const handleGumroadUpload = async (productId: string) => {
     setIsListingId(productId);
     try {
-      // Gumroad listing is now fully autonomous in the pipeline
-      // Just log and refresh data
-      console.log("[AUTONOMOUS] Gumroad listing initiated automatically in pipeline");
-      await fetchData();
+      // Trigger the full autonomous pipeline (Wayback -> AI -> Gumroad -> IPFS)
+      console.log("[AUTONOMOUS] Triggering full autonomous pipeline for Gumroad listing");
+      const res = await fetch("/api/otonom/trigger", { method: "POST" });
+      if (res.ok) {
+        console.log("[AUTONOMOUS] Pipeline triggered successfully");
+        await fetchData();
+      } else {
+        console.error("[AUTONOMOUS] Pipeline trigger failed:", res.status);
+      }
     } catch (err) {
       console.error("Gumroad listing error:", err);
     } finally {
