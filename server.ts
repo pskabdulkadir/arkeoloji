@@ -462,18 +462,17 @@ async function executeOtonomPipeline() {
       });
 
       const priceCents = Math.round((newProduct.price || 25) * 100);
+      const token = process.env.GUMROAD_API_KEY || "";
+
       const formParams = new URLSearchParams();
       formParams.append('name', String(newProduct.title || "Siber Antika"));
       formParams.append('price_cents', String(priceCents));
       formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
+      formParams.append('access_token', token);
 
-      console.log("[STEP-3-PAYLOAD] Form params string:", formParams.toString());
-      console.log("[STEP-3-TOKEN-CHECK] Token length:", (process.env.GUMROAD_API_KEY || "").length);
+      console.log("[STEP-3-PAYLOAD]", { priceCents, title: newProduct.title });
 
-      const token = process.env.GUMROAD_API_KEY || "";
-      const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
-
-      const gumroadRes = await axios.post(apiUrl, formParams.toString(), {
+      const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         },
