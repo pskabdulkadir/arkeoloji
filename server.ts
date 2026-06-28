@@ -452,9 +452,9 @@ async function executeOtonomPipeline() {
 
     try {
       const formParams = new URLSearchParams();
-      formParams.append('product[name]', String(newProduct.title || "Siber Antika"));
-      formParams.append('product[price_cents]', String(Math.round(newProduct.price * 100))); // Doğru sarmallanmış format
-      formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
+      formParams.append('name', String(newProduct.title || "Siber Antika"));
+      formParams.append('price_cents', String(Math.round(newProduct.price * 100))); // Basit format
+      formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
 
       console.log("[AUTOMATION-ENFORCED] Manuel form iptal edildi. Otonom API tetikleniyor...");
       console.log("[GUMROAD-REQUEST] Payload:", formParams.toString());
