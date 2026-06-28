@@ -508,13 +508,12 @@ async function executeOtonomPipeline() {
       await setDoc(doc(db, "artifacts", artifact.id), artifact);
     }
 
-    // Adım 4: IPFS Merkezsiz Arşivleme
+    // Adım 4: IPFS Merkezsiz Arşivleme (Optional)
     await writeLogToFirestore("info", `Otonom Adım 4: IPFS merkezsiz arşivleme işlemi başlatılıyor...`, "SYSTEM");
 
     if (!process.env.IPFS_API_URL) {
-      throw new Error("IPFS_API_URL ortam degiskeni ayarli degil");
-    }
-
+      await writeLogToFirestore("warn", `IPFS_API_URL ortam değişkeni ayarlı değil. Adım 4 atlanıyor.`, "SYSTEM");
+    } else {
     const ipfsRes = await axios.post(`${process.env.IPFS_API_URL}/add`, {
       product_id: newProduct.id,
       title: newProduct.title,
@@ -536,9 +535,10 @@ async function executeOtonomPipeline() {
     if (db) {
       await setDoc(doc(db, "products", productId), newProduct);
     }
-    await writeLogToFirestore("info", `Otonom Adım 4 Başarılı: IPFS arşivleme tamamlandı (CID: ${ipfsCid})`, "SYSTEM");
+      await writeLogToFirestore("info", `Otonom Adım 4 Başarılı: IPFS arşivleme tamamlandı (CID: ${ipfsCid})`, "SYSTEM");
+    }
 
-    await writeLogToFirestore("info", `TÜM OTONOM HAT BAŞARIYLA TAMAMLANDI! Yepyeni siber-eser mağazada satışa sunuldu ve IPFS'e kaydedildi.`, "SYSTEM");
+    await writeLogToFirestore("info", `TÜM OTONOM HAT BAŞARIYLA TAMAMLANDI! Yepyeni siber-eser mağazada satışa sunuldu ve arşivlendi.`, "SYSTEM");
   } catch (pipelineErr: any) {
     await writeLogToFirestore("error", `Otonom Akış Hatası: ${pipelineErr.message}`, "SYSTEM");
   }
