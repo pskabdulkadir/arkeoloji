@@ -64,7 +64,12 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isListingId, setIsListingId] = useState<string | null>(null);
   const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
-  
+
+  // Gumroad webhook modal states
+  const [gumroadModalOpen, setGumroadModalOpen] = useState<boolean>(false);
+  const [gumroadModalData, setGumroadModalData] = useState<any>(null);
+  const [gumroadUrl, setGumroadUrl] = useState<string>("");
+
   // Interactive product preview states
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [synthPlayingId, setSynthPlayingId] = useState<string | null>(null);
@@ -359,20 +364,48 @@ export default function App() {
     }
   };
 
-  // Module 4 Manual Trigger: Gumroad upload
+  // Module 4 Manual Trigger: Gumroad upload (Webhook flow)
   const handleGumroadUpload = async (productId: string) => {
     setIsListingId(productId);
     try {
       const res = await fetch(`/api/products/list-gumroad/${productId}`, {
         method: "POST"
       });
-      if (res.ok) {
-        await fetchData();
-      }
+      const data = await res.json();
+
+      // Modal açarak webhook akışını başlat
+      setGumroadModalData(data);
+      setGumroadUrl("");
+      setGumroadModalOpen(true);
     } catch (err) {
       console.error("Gumroad listing error:", err);
     } finally {
       setIsListingId(null);
+    }
+  };
+
+  // Webhook tetikleyici: Gumroad'da ürün oluşturduktan sonra
+  const handleGumroadWebhookSubmit = async () => {
+    if (!gumroadUrl || !gumroadModalData?.product?.id) return;
+
+    try {
+      const res = await fetch("/api/webhooks/gumroad-created", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_id: gumroadModalData.product.id,
+          short_url: gumroadUrl,
+          gumroad_product_id: gumroadUrl.split("/").pop()
+        })
+      });
+
+      if (res.ok) {
+        await fetchData();
+        setGumroadModalOpen(false);
+        setGumroadUrl("");
+      }
+    } catch (err) {
+      console.error("Webhook submission error:", err);
     }
   };
 
@@ -1275,6 +1308,97 @@ export default function App() {
       </main>
 
       {/* FOOTER METADATA */}
+      {/* Gumroad Webhook Modal */}
+      {gumroadModalOpen && gumroadModalData && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 font-mono">
+            <div className="flex items-center gap-2 mb-4">
+              <ShoppingBag className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-xl font-bold text-cyan-400">Gumroad Manuel Ürün Oluşturma</h3>
+            </div>
+
+            <div className="space-y-4 mb-6 text-sm">
+              <p className="text-slate-300">
+                Aşağıdaki bilgileri kullanarak <a href="https://gumroad.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Gumroad.com</a> web arayüzünde yeni ürün oluştur:
+              </p>
+
+              <div className="bg-slate-900 p-4 rounded border border-slate-800 space-y-3">
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">📌 Ürün Adı (Title):</label>
+                  <input
+                    type="text"
+                    value={gumroadModalData.product?.title || ""}
+                    readOnly
+                    className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-green-400 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">💰 Fiyat (Price):</label>
+                  <input
+                    type="text"
+                    value={"$" + (gumroadModalData.product?.price || "0.00")}
+                    readOnly
+                    className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-green-400 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">📝 Açıklama (Description) - İlk 100 Karakter:</label>
+                  <textarea
+                    value={gumroadModalData.product?.description?.substring(0, 150) || ""}
+                    readOnly
+                    className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-green-400 text-sm resize-none h-20"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-yellow-900/20 border border-yellow-900/50 p-3 rounded text-yellow-300 text-xs">
+                <p className="font-bold mb-1">⚠️ Adımlar:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Gumroad.com'a git ve 'Create' butonuna tıkla</li>
+                  <li>Yukarıdaki bilgileri doldurun ve ürünü oluşturun</li>
+                  <li>Ürün başarıyla oluşturulduktan sonra, Gumroad bağlantısını aşağıya yapıştır</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-slate-400 text-sm block">
+                🔗 Gumroad Ürün Bağlantısı (Kopyala-Yapıştır):
+              </label>
+              <input
+                type="text"
+                placeholder="https://gumroad.com/l/xxxxx"
+                value={gumroadUrl}
+                onChange={(e) => setGumroadUrl(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded px-4 py-2.5 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setGumroadModalOpen(false);
+                  setGumroadUrl("");
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition font-mono text-sm"
+              >
+                ✕ İptal
+              </button>
+              <button
+                onClick={handleGumroadWebhookSubmit}
+                disabled={!gumroadUrl.trim()}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-mono text-sm font-bold transition flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Gumroad Bağlantısını Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer className="border-t border-slate-900 bg-[#070a14] py-6 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 font-sans">
           <p>© 2026 Siber-Arkeoloji Otonom Satış Botu Projesi. Tüm hakları saklıdır.</p>
