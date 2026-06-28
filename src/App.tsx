@@ -25,7 +25,6 @@ import {
   TrendingUp,
   Sliders,
   Check,
-  Users,
   FileText,
   Power,
   Volume2,
@@ -1369,7 +1368,7 @@ export default function App() {
         <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
           <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" />
+              <Layers className="w-4 h-4 text-amber-400" />
               <h2 className="font-bold text-sm tracking-wide text-white uppercase">SİBER-KOLEKTİF GALERİSİ</h2>
             </div>
             <span className="text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">MODULE 8</span>
@@ -1411,6 +1410,45 @@ export default function App() {
                   ))}
                 </div>
               );
+            })()}
+          </div>
+        </section>
+
+        {/* STRATEGIC ANALYSIS & OPTIMIZATION REPORT */}
+        <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
+          <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-lime-400" />
+              <h2 className="font-bold text-sm tracking-wide text-white uppercase">STRATEJİK ANALİZ & OPTİMİZASYON RAPORU</h2>
+            </div>
+            <span className="text-[10px] font-mono bg-lime-500/10 text-lime-400 px-2 py-0.5 rounded border border-lime-500/20">MODULE 7</span>
+          </div>
+          <div className="p-4 h-[300px] overflow-y-auto scrollbar-thin space-y-3">
+            {(() => {
+              const analysisLogs = logs.filter(l => l.message.startsWith("Trend analizi:"));
+              if (analysisLogs.length === 0) {
+                return (
+                  <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                    <TrendingUp className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Henüz bir analiz raporu oluşturulmadı.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Otonom sistem, periyodik olarak satış verilerini analiz eder ve stratejisini günceller.</p>
+                  </div>
+                );
+              }
+              return analysisLogs.map(log => {
+                const analysisContent = log.message.replace("Trend analizi: ", "");
+                return (
+                  <div key={log.id} className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-start gap-3">
+                    <div className="p-1.5 bg-lime-500/10 text-lime-400 rounded-md mt-0.5">
+                      <Activity className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{analysisContent}</p>
+                      <span className="text-[10px] font-mono text-slate-500 mt-1 block">{new Date(log.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                );
+              });
             })()}
           </div>
         </section>
@@ -1529,6 +1567,48 @@ export default function App() {
                 );
               })()}
             </div>
+          </div>
+        </section>
+
+        {/* COMMUNICATIONS & SOCIAL MEDIA CENTER */}
+        <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
+          <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-blue-400" />
+              <h2 className="font-bold text-sm tracking-wide text-white uppercase">İLETİŞİM & SOSYAL MEDYA MERKEZİ</h2>
+            </div>
+            <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">MODULE 9</span>
+          </div>
+          <div className="p-4 h-[300px] overflow-y-auto scrollbar-thin space-y-3">
+            {(() => {
+              const socialPosts = logs.filter(l => l.message.startsWith("SOSYAL MEDYA GÖNDERİSİ HAZIRLANDI:"));
+              if (socialPosts.length === 0) {
+                return (
+                  <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                    <Send className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Hazırlanmış sosyal medya gönderisi yok.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Yeni bir ürün listelendiğinde, bot otomatik olarak bir tanıtım gönderisi hazırlar.</p>
+                  </div>
+                );
+              }
+              return socialPosts.map(post => {
+                const postContent = post.message.replace("SOSYAL MEDYA GÖNDERİSİ HAZIRLANDI:\n", "");
+                return (
+                  <div key={post.id} className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{postContent}</p>
+                    <div className="pt-2 border-t border-slate-800/50 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-500">{new Date(post.timestamp).toLocaleString()}</span>
+                      <button
+                        onClick={() => handleCopyText(postContent, post.id)}
+                        className="text-[10px] font-mono bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/20 rounded-md px-2 py-1 transition"
+                      >
+                        {copiedId === post.id ? "Kopyalandı!" : "Kopyala ve Paylaş"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </section>
 
