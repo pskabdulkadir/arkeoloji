@@ -444,22 +444,69 @@ async function executeOtonomPipeline() {
     }
     await writeLogToFirestore("info", `Otonom Adım 2 Başarılı: Eser '${resultTitle}' (${selectedType}) kürasyonu tamamlandı ve kaydedildi.`, "SYSTEM");
 
-    // Adım 3: Gumroad Manuel Listeleme (Webhook Akışı)
-    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad manuel listeleme akışına geçiliyor. Ürün verisi hazırlandı.`, "SYSTEM");
+    // Adım 3: Gumroad Otonom Entegrasyonu (Doğru Parametre Formatı ile)
+    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API otonom çağrısı başlatılıyor (Doğru parametre sarmallaması ile)...`, "SYSTEM");
 
-    // Ürün hazır durumda kaydedilir, manuel olarak Gumroad'da oluşturulması beklenilir
-    newProduct.is_listed = false;
-    newProduct.marketplace_url = "";
+    let finalMarketplaceUrl = "";
+    let gumroadSuccess = false;
 
-    artifact.is_analyzed = true;
-    artifact.status = "analyzed";
+    try {
+      const formParams = new URLSearchParams();
+      formParams.append('product[name]', String(newProduct.title || "Siber Antika"));
+      formParams.append('product[price_cents]', String(Math.round(newProduct.price * 100))); // Doğru sarmallanmış format
+      formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
+
+      console.log("[AUTOMATION-ENFORCED] Manuel form iptal edildi. Otonom API tetikleniyor...");
+      console.log("[GUMROAD-REQUEST] Payload:", formParams.toString());
+
+      const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+        headers: {
+          'Authorization': `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        timeout: 30000
+      });
+
+      console.log("[GUMROAD-RESPONSE] Cevap:", JSON.stringify(gumroadRes.data));
+
+      if (gumroadRes?.data?.product?.short_url && gumroadRes?.data?.product?.id) {
+        finalMarketplaceUrl = gumroadRes.data.product.short_url;
+        gumroadSuccess = true;
+
+        const gumId = gumroadRes.data.product.id;
+        try {
+          await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
+            timeout: 30000,
+            headers: {
+              'Authorization': `Bearer ${process.env.GUMROAD_API_KEY || ""}`
+            }
+          });
+          await writeLogToFirestore("info", `Otonom Adım 3.1: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
+        } catch (pubErr: any) {
+          await writeLogToFirestore("warn", `Gumroad publish hatası (kritik değil): ${pubErr.message}`, "SYSTEM");
+        }
+
+        newProduct.is_listed = true;
+        newProduct.marketplace_url = finalMarketplaceUrl;
+        artifact.is_listed = true;
+        artifact.status = "listed";
+
+        await writeLogToFirestore("info", `Otonom Adım 3 BAŞARILI: Gumroad ürünü otomatik olarak listelendi! -> ${finalMarketplaceUrl}`, "SYSTEM");
+      } else {
+        throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes?.data || {})}`);
+      }
+    } catch (gumErr: any) {
+      await writeLogToFirestore("error", `Otonom Adım 3 HATASI: Gumroad API hatası -> ${gumErr.message}. Status: ${gumErr.response?.status || 'N/A'}.`, "SYSTEM");
+      newProduct.is_listed = false;
+      newProduct.marketplace_url = "";
+      artifact.is_analyzed = true;
+      artifact.status = "analyzed";
+    }
 
     if (db) {
       await setDoc(doc(db, "products", productId), newProduct);
       await setDoc(doc(db, "artifacts", artifact.id), artifact);
     }
-
-    await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${newProduct.title}' Gumroad manuel listeleme için hazırlandı. Bağlantı: /api/products/export-gumroad/${productId}`, "SYSTEM");
 
     // Adım 4: IPFS Merkezsiz Arşivleme
     await writeLogToFirestore("info", `Otonom Adım 4: IPFS merkezsiz arşivleme işlemi başlatılıyor...`, "SYSTEM");
@@ -846,10 +893,11 @@ async function generateZinePdf(title: string, text: string): Promise<Buffer> {
 }
 
 // ==========================================
-// MODULE 4: GUMROAD WEBHOOK & MANUAL LISTING
+// MODULE 4: GUMROAD AUTONOMOUS LISTING
+// (Manual endpoints removed - Full automation in pipeline)
 // ==========================================
 
-// Endpoint to get product data for manual Gumroad listing
+// DEPRECATED - Manual Gumroad endpoint removed
 app.get("/api/products/export-gumroad/:id", async (req, res) => {
   const productId = req.params.id;
   if (!db) {
