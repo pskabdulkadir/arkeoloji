@@ -366,15 +366,22 @@ export default function App() {
 
   // Module 4: Gumroad upload (MANUAL - open form for user to edit details before submitting)
   const handleGumroadUpload = async (productId: string) => {
+    console.log("[GUMROAD-MODAL] Button tıklandı, productId:", productId);
     const product = products.find(p => p.id === productId);
+    console.log("[GUMROAD-MODAL] Ürün bulundu:", product);
     if (product) {
-      setGumroadModalData({
+      const modalData = {
         productId: product.id,
         title: product.title,
         price: product.price || 25,
         description: product.description || ""
-      });
+      };
+      console.log("[GUMROAD-MODAL] Modal data hazırlanıyor:", modalData);
+      setGumroadModalData(modalData);
       setGumroadModalOpen(true);
+      console.log("[GUMROAD-MODAL] Modal açılıyor...");
+    } else {
+      console.error("[GUMROAD-MODAL] Ürün bulunamadı!");
     }
   };
 
