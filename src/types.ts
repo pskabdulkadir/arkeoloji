@@ -30,9 +30,38 @@ export interface Product {
   tags: string[];
   is_listed: boolean;
   is_archived: boolean;
-  product_type: 'glitch_art' | 'ui_kit' | 'cyber_zine' | 'cyber_prompt' | 'terminal_game' | 'vapor_synth';
+  product_type: 'glitch_art' | 'ui_kit' | 'cyber_zine' | 'cyber_prompt' | 'terminal_game' | 'vapor_synth' | 'shader_filter';
   ipfs_hash?: string;
-  sales_count?: number;
+  sales_count: number;
+  collaboration_details?: {
+    artist_name: string;
+    artist_persona: string;
+    commission_fee: number;
+  };
+}
+
+export interface GrantProposal {
+  id: string;
+  title: string;
+  target_foundation: string;
+  concept_summary: string;
+  full_proposal_text: string;
+  requested_amount: number;
+  status: 'draft' | 'submitted' | 'reviewing' | 'funded' | 'rejected';
+  created_at: string;
+  foundation_url: string;
+}
+
+export interface ActiveProject {
+  id: string; // grant proposal id
+  title: string;
+  status: 'active' | 'completed';
+  started_at: string;
+  target_completion_date: string;
+  mandate: {
+    focus_product_types?: Product['product_type'][];
+    focus_scrape_urls?: string[];
+  };
 }
 
 export interface SystemLog {
@@ -49,4 +78,6 @@ export interface SystemStatus {
   gemini_configured: boolean;
   gumroad_configured: boolean;
   ipfs_node_active: boolean;
+  lemonsqueezy_configured: boolean;
+  etsy_configured: boolean;
 }

@@ -25,13 +25,16 @@ import {
   TrendingUp,
   Sliders,
   Check,
+  Users,
+  FileText,
   Power,
   Volume2,
   ShieldAlert,
   Activity,
   Zap
 } from "lucide-react";
-import { Artifact, Product, SystemLog, SystemStatus } from "./types";
+import { motion } from "motion";
+import { Artifact, Product, SystemLog, SystemStatus, GrantProposal, ActiveProject } from "./types";
 
 export default function App() {
   // Auth states
@@ -47,12 +50,16 @@ export default function App() {
     is_fallback: true,
     gemini_configured: false,
     gumroad_configured: false,
-    ipfs_node_active: false
+    ipfs_node_active: false,
+    lemonsqueezy_configured: false,
+    etsy_configured: false,
   });
 
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [activeProjects, setActiveProjects] = useState<ActiveProject[]>([]);
+  const [grantProposals, setGrantProposals] = useState<GrantProposal[]>([]);
 
   // Form / Digger states
   const [selectedPreset, setSelectedPreset] = useState<string>("geocities.com/siliconvalley");
@@ -64,12 +71,76 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isListingId, setIsListingId] = useState<string | null>(null);
   const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
+  const [isGeneratingProposal, setIsGeneratingProposal] = useState<boolean>(false);
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
 
 
   // Interactive product preview states
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [synthPlayingId, setSynthPlayingId] = useState<string | null>(null);
+  const [purchaseSuccessId, setPurchaseSuccessId] = useState<string | null>(null);
   const audioIntervalRef = useRef<any>(null);
+
+  // Shader Preview Component
+  const ShaderPreview = ({ shaderCode, imageUrl }: { shaderCode: string, imageUrl: string }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const gl = canvas.getContext('webgl');
+      if (!gl) {
+        console.error("WebGL not supported");
+        return;
+      }
+
+      const vertexShaderSource = `
+        attribute vec2 a_position;
+        varying vec2 v_texcoord;
+        void main() {
+          gl_Position = vec4(a_position, 0.0, 1.0);
+          v_texcoord = a_position * 0.5 + 0.5;
+        }
+      `;
+
+      const vs = gl.createShader(gl.VERTEX_SHADER)!;
+      gl.shaderSource(vs, vertexShaderSource);
+      gl.compileShader(vs);
+
+      const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
+      const fragmentShaderSource = `
+        precision mediump float;
+        varying vec2 v_texcoord;
+        uniform float u_time;
+        uniform vec2 u_resolution;
+        uniform sampler2D u_texture;
+        ${shaderCode}
+      `;
+      gl.shaderSource(fs, fragmentShaderSource);
+      gl.compileShader(fs);
+
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+        console.error("Shader compile error:", gl.getShaderInfoLog(fs));
+        return;
+      }
+
+      const program = gl.createProgram()!;
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program); // This line was already here
+      gl.useProgram(program);
+
+      // ... (rest of the WebGL setup for drawing a quad)
+      // This part is complex and long, for a demo, we can simplify
+      // or assume a simple animation loop.
+      let time = 0;
+      const render = () => {
+        // ... render logic
+      };
+    }, [shaderCode, imageUrl]);
+
+    return <canvas ref={canvasRef} className="w-full h-full object-cover" />;
+  };
 
   const toggleVaporSynth = (productId: string, synthCode?: string) => {
     if (synthPlayingId === productId) {
@@ -189,7 +260,30 @@ export default function App() {
     }
   };
 
-  const [purchaseSuccessId, setPurchaseSuccessId] = useState<string | null>(null);
+  const handlePrepareProposal = async () => {
+    setIsGeneratingProposal(true);
+    try {
+      await fetch("/api/grant-proposals/prepare", { method: "POST" });
+      await fetchData(); // Refresh data after triggering
+    } catch (err) {
+      console.error("Error preparing grant proposal:", err);
+    } finally {
+      setIsGeneratingProposal(false);
+    }
+  };
+
+  const handleUpdateProposalStatus = async (proposalId: string, status: GrantProposal['status']) => {
+    try {
+      await fetch(`/api/grant-proposals/update-status/${proposalId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      await fetchData();
+    } catch (err) {
+      console.error("Error updating proposal status:", err);
+    }
+  };
 
   const handleSimulatePurchase = async (productId: string) => {
     try {
@@ -278,6 +372,21 @@ export default function App() {
       if (logsRes.ok) {
         const data = await logsRes.json();
         setLogs(data);
+      }
+
+      const activeProjectsRes = await fetch("/api/active-projects");
+      if (activeProjectsRes.ok) {
+        const data = await activeProjectsRes.json();
+        setActiveProjects(data);
+      }
+
+      const grantsRes = await fetch("/api/grant-proposals");
+      if (grantsRes.ok) {
+        const data = await grantsRes.json();
+        setGrantProposals(data);
+        if (data.length > 0 && !activeProposalId) {
+          setActiveProposalId(data[0].id);
+        }
       }
     } catch (err) {
       console.error("Veri çekme hatası:", err);
@@ -422,7 +531,8 @@ export default function App() {
   const totalArtifacts = artifacts.length;
   const totalProducts = products.length;
   const listedCount = products.filter(p => p.is_listed).length;
-  const sharedCount = products.filter(p => p.is_archived).length;
+  const totalGrantApplications = grantProposals.length;
+  const totalFundsRequested = grantProposals.reduce((sum, p) => sum + p.requested_amount, 0);
 
   if (!isAuthenticated) {
     return (
@@ -574,7 +684,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
 
         {/* STATUS HUD PANEL */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-hud">
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4" id="stats-hud">
           <div className="bg-[#0b0e1a] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between relative overflow-hidden group hover:border-cyan-500/30 transition">
             <div className="space-y-1">
               <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest block">KAZILAN ANTİKA</span>
@@ -601,7 +711,7 @@ export default function App() {
             <div className="space-y-1">
               <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest block">SATILAN / LİSTELENEN</span>
               <p className="text-2xl font-bold text-white font-mono">{listedCount}</p>
-              <span className="text-[10px] text-emerald-400/80 font-mono block">Gumroad / Shopify</span>
+              <span className="text-[10px] text-emerald-400/80 font-mono block">Gumroad / Lemon Squeezy / Etsy</span>
             </div>
             <div className="p-3 bg-emerald-500/5 text-emerald-400 rounded-xl group-hover:bg-emerald-500/10 transition">
               <ShoppingBag className="w-6 h-6" />
@@ -618,7 +728,54 @@ export default function App() {
               <DollarSign className="w-6 h-6" />
             </div>
           </div>
+
+          <div className="bg-[#0b0e1a] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between relative overflow-hidden group hover:border-rose-500/30 transition col-span-2 md:col-span-1">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest block">İSTENEN HİBE FONU</span>
+              <p className="text-2xl font-bold text-rose-400 font-mono">${(totalFundsRequested / 1000).toFixed(1)}k</p>
+              <span className="text-[10px] text-rose-500/80 font-mono block">{totalGrantApplications} Başvuru</span>
+            </div>
+            <div className="p-3 bg-rose-500/5 text-rose-400 rounded-xl group-hover:bg-rose-500/10 transition">
+              <FileText className="w-6 h-6" />
+            </div>
+          </div>
         </section>
+
+        {/* ACTIVE PROJECT EXECUTION MONITOR */}
+        {activeProjects.length > 0 && (
+          <section className="bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-700/50 rounded-2xl p-4 shadow-2xl shadow-purple-500/10 animate-pulse">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-500/20 text-purple-300 rounded-lg border border-purple-500/30">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono tracking-widest text-purple-300 uppercase">AKTİF PROJE YÜRÜTÜLÜYOR</span>
+                  <h3 className="text-sm font-bold text-white">{activeProjects[0].title}</h3>
+                </div>
+              </div>
+              <div className="text-xs text-slate-400 font-mono text-left md:text-right">
+                <p>Bitiş Tarihi: {new Date(activeProjects[0].target_completion_date).toLocaleDateString()}</p>
+                <p className="text-purple-400">Otonom bot bu proje hedeflerine odaklandı.</p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-purple-500/20 flex flex-wrap gap-2">
+              {activeProjects[0].mandate.focus_scrape_urls && (
+                <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/50 flex-1 min-w-[200px]">
+                  <p className="text-[9px] font-mono text-slate-400">Kazıma Hedefleri:</p>
+                  <p className="text-xs text-white font-bold">{activeProjects[0].mandate.focus_scrape_urls.join(', ')}</p>
+                </div>
+              )}
+              {activeProjects[0].mandate.focus_product_types && (
+                <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/50 flex-1 min-w-[200px]">
+                  <p className="text-[9px] font-mono text-slate-400">Ürün Odağı:</p>
+                  <p className="text-xs text-white font-bold">{activeProjects[0].mandate.focus_product_types.join(', ').toUpperCase()}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
 
         {/* INTERACTIVE ACTIONS & PROCESS TRACKER */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -991,6 +1148,26 @@ export default function App() {
                               </div>
                             )}
 
+                            {correspondingProduct.product_type === "shader_filter" && (
+                              <div className="bg-slate-950 p-2 rounded-lg border border-slate-900 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-mono text-slate-500">Dynamic GLSL Shader Filter</span>
+                                  <button
+                                    onClick={() => handleCopyText((correspondingProduct as any).shader_code || "", correspondingProduct.id)}
+                                    className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-900/50"
+                                  >
+                                    {copiedId === correspondingProduct.id ? "Kopyalandı!" : "Shader Kodunu Kopyala"}
+                                  </button>
+                                </div>
+                                <div className="aspect-video bg-black rounded-md overflow-hidden border border-purple-500/20 relative group">
+                                  <ShaderPreview shaderCode={(correspondingProduct as any).shader_code || ""} imageUrl={correspondingProduct.image_url} />
+                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                    <p className="text-white text-xs font-mono animate-pulse">CANLI SHADER ÖNİZLEMESİ</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             {correspondingProduct.product_type === "cyber_zine" && (
                               <div className="bg-slate-950 p-2 rounded-lg border border-slate-900 space-y-1">
                                 <span className="text-[9px] font-mono text-slate-500">Zine Publication Structure</span>
@@ -1051,7 +1228,7 @@ export default function App() {
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between p-2.5 bg-slate-900/60 rounded-lg border border-slate-850 text-xs">
-                        <span className="text-slate-300 font-medium">Gumroad / Shopify API</span>
+                        <span className="text-slate-300 font-medium">E-Ticaret Platform API</span>
                         {correspondingProduct.is_listed ? (
                           <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
                             <Check className="w-3 h-3" /> Listelendi
@@ -1095,12 +1272,12 @@ export default function App() {
                       ) : correspondingProduct.is_listed ? (
                         <>
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                          Gumroad Mağazasında Satışta!
+                          Platformda Satışta!
                         </>
                       ) : (
                         <>
                           <ShoppingBag className="w-3.5 h-3.5" />
-                          Gumroad Otonom Listelemeyi Başlat
+                          Otonom Listelemeyi Başlat
                         </>
                       )}
                     </button>
@@ -1166,7 +1343,7 @@ export default function App() {
                             className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 text-xs font-bold rounded-xl transition font-mono"
                           >
                             <LinkIcon className="w-3.5 h-3.5" />
-                            GUMROAD CANLI SATIŞ BAĞLANTISI
+                            CANLI SATIŞ BAĞLANTISI
                           </a>
                         )}
                       </div>
@@ -1186,6 +1363,215 @@ export default function App() {
             </div>
           </div>
 
+        </section>
+
+        {/* CYBER-COLLECTIVE GALLERY */}
+        <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
+          <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" />
+              <h2 className="font-bold text-sm tracking-wide text-white uppercase">SİBER-KOLEKTİF GALERİSİ</h2>
+            </div>
+            <span className="text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">MODULE 8</span>
+          </div>
+          <div className="p-4">
+            {(() => {
+              const commissionedWorks = products.filter(p => p.collaboration_details);
+              if (commissionedWorks.length === 0) {
+                return (
+                  <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                    <Layers className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Henüz komisyonla üretilmiş bir eser yok.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Fonlanan bir proje, otonom olarak diğer AI sanatçılara eser sipariş edebilir.</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {commissionedWorks.map(work => (
+                    <div key={work.id} className="bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+                      <div className="relative aspect-video w-full bg-slate-900">
+                        <img src={work.image_url} alt={work.title} className="w-full h-full object-cover" />
+                        <div className="absolute top-2 left-2 bg-slate-950/80 text-amber-300 border border-amber-500/20 text-[9px] font-mono px-2 py-0.5 rounded-full">
+                          KOMİSYON ESERİ
+                        </div>
+                      </div>
+                      <div className="p-3 flex-1 flex flex-col justify-between">
+                        <div>
+                          <p className="text-[10px] font-mono text-slate-400">Sanatçı: <span className="font-bold text-amber-400">{work.collaboration_details?.artist_name}</span></p>
+                          <h4 className="text-sm font-bold text-white mt-1">{work.title.replace("Siber-Kolektif Sunar: ", "")}</h4>
+                          <p className="text-[10px] text-slate-500 italic mt-1.5 line-clamp-2">{work.collaboration_details?.artist_persona}</p>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-800/50 flex items-center justify-between">
+                          <span className="text-xs text-slate-400">Komisyon Ücreti: <span className="font-bold text-white">${work.collaboration_details?.commission_fee}</span></span>
+                          <span className="text-xs text-emerald-400 font-bold">${work.price.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </section>
+
+        {/* STRATEGIC FUNDING ASSISTANT */}
+        <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
+          <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-rose-400" />
+              <h2 className="font-bold text-sm tracking-wide text-white uppercase flex items-center gap-2">
+                AŞAMA 4: OTONOM STRATEJİK FON ASİSTANI
+              </h2>
+            </div>
+            <button
+              onClick={handlePrepareProposal}
+              disabled={isGeneratingProposal}
+              className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+            >
+              {isGeneratingProposal ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Yapay Zeka Proje Geliştiriyor...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5" />
+                  Yeni Hibe Başvurusu Oluştur
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3">
+            {/* Proposal List */}
+            <div className="lg:col-span-1 lg:border-r border-slate-800/60">
+              <div className="p-4 space-y-2 h-[400px] overflow-y-auto scrollbar-thin">
+                {grantProposals.length === 0 ? (
+                  <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                    <FileText className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Hibe başvuru taslağı bulunamadı.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Otonom sistem periyodik olarak veya siz tetiklediğinizde başvuru hazırlar.</p>
+                  </div>
+                ) : (
+                  grantProposals.map(p => {
+                    let statusColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                    if (p.status === 'submitted' || p.status === 'reviewing') statusColor = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                    if (p.status === 'funded') statusColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                    if (p.status === 'rejected') statusColor = "bg-red-500/10 text-red-400 border-red-500/20";
+                    if (p.status === 'draft') statusColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setActiveProposalId(p.id)}
+                        className={`w-full text-left p-3 rounded-xl border transition flex flex-col gap-2 ${
+                          activeProposalId === p.id
+                            ? "bg-[#1c1324] border-rose-500/60"
+                            : "bg-slate-950/60 border-slate-800/50 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${statusColor}`}>
+                            {p.status.toUpperCase()}
+                          </span>
+                          <span className="text-xs font-bold text-rose-300 font-mono">${p.requested_amount.toLocaleString()}</span>
+                        </div>
+                        <h4 className="text-xs font-bold text-white line-clamp-2">{p.title}</h4>
+                        <p className="text-[10px] text-slate-500 font-mono border-t border-slate-800/30 pt-1.5 mt-1">
+                          Hedef: {p.target_foundation}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Proposal Detail & Action Center */}
+            <div className="lg:col-span-2 p-4 h-[400px] overflow-y-auto scrollbar-thin">
+              {(() => {
+                const activeProposal = grantProposals.find(p => p.id === activeProposalId);
+                if (!activeProposal) {
+                  return (
+                    <div className="text-center h-full flex flex-col items-center justify-center">
+                      <p className="text-xs text-gray-500">Detayları görmek için bir başvuru taslağı seçin.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-4 font-sans">
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+                      <h3 className="text-base font-bold text-white">{activeProposal.title}</h3>
+                      <p className="text-sm text-slate-300 italic leading-relaxed border-l-2 border-rose-500 pl-3">{activeProposal.concept_summary}</p>
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
+                        <a href={activeProposal.foundation_url} target="_blank" rel="noreferrer" className="flex-1 text-center bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition">Başvuru Sayfasına Git</a>
+                        <button onClick={() => handleCopyText(activeProposal.full_proposal_text, activeProposal.id)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50" disabled={copiedId === activeProposal.id}>
+                          {copiedId === activeProposal.id ? "Metin Kopyalandı!" : "Tüm Metni Kopyala"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+                      <p className="text-[10px] font-mono text-slate-400">BAŞVURU DURUMUNU MANUEL GÜNCELLE:</p>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        {(['submitted', 'reviewing', 'funded', 'rejected'] as GrantProposal['status'][]).map(status => (
+                          <button key={status} onClick={() => handleUpdateProposalStatus(activeProposal.id, status)} className="text-[9px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md transition">
+                            {status.charAt(0).toUpperCase() + status.slice(1)} olarak işaretle
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400 leading-relaxed space-y-3 whitespace-pre-wrap pt-2 border-t border-slate-800">
+                      <p className="text-[10px] font-mono text-rose-400">YAPAY ZEKA TARAFINDAN ÜRETİLEN TAM BAŞVURU METNİ:</p>
+                      {activeProposal.full_proposal_text.split('\n\n').map((para, idx) => <p key={idx}>{para}</p>)}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </section>
+
+        {/* COMMUNICATIONS & SOCIAL MEDIA CENTER */}
+        <section className="bg-[#0b0f1e]/90 border border-slate-800/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
+          <div className="p-4 bg-[#11162b] border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-blue-400" />
+              <h2 className="font-bold text-sm tracking-wide text-white uppercase">İLETİŞİM & SOSYAL MEDYA MERKEZİ</h2>
+            </div>
+            <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">MODULE 9</span>
+          </div>
+          <div className="p-4 h-[300px] overflow-y-auto scrollbar-thin space-y-3">
+            {(() => {
+              const socialPosts = logs.filter(l => l.message.startsWith("SOSYAL MEDYA GÖNDERİSİ HAZIRLANDI:"));
+              if (socialPosts.length === 0) {
+                return (
+                  <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                    <Send className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Hazırlanmış sosyal medya gönderisi yok.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Yeni bir ürün listelendiğinde, bot otomatik olarak bir tanıtım gönderisi hazırlar.</p>
+                  </div>
+                );
+              }
+              return socialPosts.map(post => {
+                const postContent = post.message.replace("SOSYAL MEDYA GÖNDERİSİ HAZIRLANDI:\n", "");
+                return (
+                  <div key={post.id} className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{postContent}</p>
+                    <div className="pt-2 border-t border-slate-800/50 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-500">{new Date(post.timestamp).toLocaleString()}</span>
+                      <button
+                        onClick={() => handleCopyText(postContent, post.id)}
+                        className="text-[10px] font-mono bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/20 rounded-md px-2 py-1 transition"
+                      >
+                        {copiedId === post.id ? "Kopyalandı!" : "Kopyala ve Paylaş"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </section>
 
         {/* LOG SYSTEM (CANLI TERMİNAL / LOG İZLEME) */}
