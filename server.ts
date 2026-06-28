@@ -454,7 +454,8 @@ async function executeOtonomPipeline() {
     let gumroadSuccess = false;
 
     try {
-      const priceCents = Math.max(100, Math.round((newProduct.price || 25) * 100));
+      const price = newProduct.price || 25;
+      const priceCents = Math.round(price * 100);
       const token = process.env.GUMROAD_API_KEY || "";
 
       if (!token) throw new Error("Gumroad API key not configured!");
@@ -464,7 +465,12 @@ async function executeOtonomPipeline() {
       formParams.append('product[price_cents]', String(priceCents));
       formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
 
-      console.log("[GUMROAD] Creating product with wrapped parameters");
+      console.log("[GUMROAD-REQUEST]", {
+        title: newProduct.title,
+        priceCents,
+        price,
+        formString: formParams.toString().substring(0, 200)
+      });
 
       const response = await axios.post(
         'https://api.gumroad.com/v2/products',
