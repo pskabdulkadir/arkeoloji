@@ -391,7 +391,7 @@ async function getDynamicConfiguration(): Promise<{ productType: Product['produc
           if (!acc[p.product_type]) {
             acc[p.product_type] = 0;
           }
-          acc[p.product_type] += p.sales_count || 0;
+          acc[p.product_type] += p.sales_count;
           return acc;
         }, {} as Record<Product['product_type'], number>);
 
@@ -419,11 +419,14 @@ async function executeOtonomPipeline() {
 
   // GUMROAD API HIZ LİMİTİ KORUMASI (Gelişmiş)
   try {
-    const products = await getProductsFromFirestore();
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const listedTodayCount = products.filter(p => 
-      p.is_listed && new Date(p.created_at) > twentyFourHoursAgo
-    ).length;
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const q = query(
+      collection(db, "products"), 
+      where("is_listed", "==", true),
+      where("created_at", ">=", twentyFourHoursAgo)
+    );
+    const snapshot = await getDocs(q);
+    const listedTodayCount = snapshot.size;
 
     if (listedTodayCount >= 9) { // Güvenlik payı bırakarak 9'da dur.
       await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 24 saatte ${listedTodayCount} ürün listelendi. Günlük limit dolmak üzere. Bu otonom döngü atlanıyor.`, "SYSTEM");
@@ -591,123 +594,112 @@ async function executeOtonomPipeline() {
     if (availablePlatforms.length === 0) {
       await writeLogToFirestore("warn", "Hiçbir satış platformu (Gumroad, Lemon Squeezy) yapılandırılmamış. Adım 3 atlanıyor.", "MARKETPLACE");
     } else {
-      let listedSuccessfully = false;
-      // Platformları rastgele bir sırayla dene
-      const shuffledPlatforms = availablePlatforms.sort(() => 0.5 - Math.random());
+      const chosenPlatform = availablePlatforms[Math.floor(Math.random() * availablePlatforms.length)];
+      await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${chosenPlatform}' platformunda listelenmek üzere seçildi.`, "MARKETPLACE");
+      
+      try {
+        if (chosenPlatform === "Gumroad") {
+          const price = newProduct.price || 25;
+          const priceCents = Math.round(price * 100);
+          const token = process.env.GUMROAD_API_KEY || "";
 
-      for (const platform of shuffledPlatforms) {
-        if (listedSuccessfully) break;
+          const productData = {
+            name: String(newProduct.title || "Siber Antika"),
+            price: priceCents,
+            description: String(newProduct.description || "Cyber-Archeologist Series"),
+          };
 
-        await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${platform}' platformunda listelenmek üzere deneniyor...`, "MARKETPLACE");
-        try {
-          if (platform === "Gumroad") {
-            const price = newProduct.price || 25;
-            const priceCents = Math.round(price * 100);
-            const token = process.env.GUMROAD_API_KEY || "";
+          const response = await axios.post('https://api.gumroad.com/v2/products', productData, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            timeout: 30000
+          });
 
-            const productData = {
-              name: String(newProduct.title || "Siber Antika"),
-              price: priceCents,
-              description: String(newProduct.description || "Cyber-Archeologist Series"),
-            };
+          if (!response.data?.product?.id || !response.data?.product?.short_url) {
+            throw new Error(`Gumroad API returned invalid response: ${JSON.stringify(response.data)}`);
+          }
 
-            const response = await axios.post('https://api.gumroad.com/v2/products', productData, {
+          finalMarketplaceUrl = response.data.product.short_url;
+          const gumId = response.data.product.id;
+
+          try {
+            await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
               headers: { 'Authorization': `Bearer ${token}` },
               timeout: 30000
             });
-
-            if (!response.data?.product?.id || !response.data?.product?.short_url) {
-              throw new Error(`Gumroad API returned invalid response: ${JSON.stringify(response.data)}`);
-            }
-
-            finalMarketplaceUrl = response.data.product.short_url;
-            const gumId = response.data.product.id;
-
-            try {
-              await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
-                headers: { 'Authorization': `Bearer ${token}` },
-                timeout: 30000
-              });
-            } catch (pubErr: any) {
-              console.log("[GUMROAD-PUBLISH-WARN]", pubErr.message);
-            }
-          } else if (platform === "LemonSqueezy") {
-            const token = process.env.LEMONSQUEEZY_API_KEY!;
-            const storeId = process.env.LEMONSQUEEZY_STORE_ID!;
-            const price = newProduct.price || 25;
-            const priceCents = Math.round(price * 100);
-
-            const headers = {
-              'Accept': 'application/vnd.api+json',
-              'Content-Type': 'application/vnd.api+json',
-              'Authorization': `Bearer ${token}`
-            };
-
-            // 1. Create Product
-            const productResponse = await axios.post('https://api.lemonsqueezy.com/v1/products', {
-              data: {
-                type: 'products',
-                attributes: {
-                  name: newProduct.title,
-                  description: newProduct.description,
-                },
-                relationships: {
-                  store: {
-                    data: {
-                      type: 'stores',
-                      id: storeId
-                    }
-                  }
-                }
-              }
-            }, { headers, timeout: 30000 });
-
-            const lemonProductId = productResponse.data.data.id;
-
-            // 2. Create Variant (Price)
-            const variantResponse = await axios.post('https://api.lemonsqueezy.com/v1/variants', {
-              data: {
-                type: 'variants',
-                attributes: {
-                  name: "Standard License",
-                  price: priceCents,
-                  is_subscription: false,
-                },
-                relationships: {
-                  product: {
-                    data: {
-                      type: 'products',
-                      id: lemonProductId
-                    }
-                  }
-                }
-              }
-            }, { headers, timeout: 30000 });
-
-            finalMarketplaceUrl = variantResponse.data.data.attributes.buy_now_url;
-          } else if (platform === "Etsy") {
-            // ETSY ENTEGRASYONU İÇİN YER TUTUCU
-            throw new Error("Etsy entegrasyonu henüz tamamlanmadı.");
+          } catch (pubErr: any) {
+            console.log("[GUMROAD-PUBLISH-WARN]", pubErr.message);
           }
+        } else if (chosenPlatform === "LemonSqueezy") {
+          const token = process.env.LEMONSQUEEZY_API_KEY!;
+          const storeId = process.env.LEMONSQUEEZY_STORE_ID!;
+          const price = newProduct.price || 25;
+          const priceCents = Math.round(price * 100);
 
-          listedSuccessfully = true;
-          newProduct.is_listed = true;
-          newProduct.marketplace_url = finalMarketplaceUrl;
-          artifact.is_listed = true;
-          artifact.status = "listed";
+          const headers = {
+            'Accept': 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            'Authorization': `Bearer ${token}`
+          };
 
-          console.log(`[${platform.toUpperCase()}-SUCCESS] Product listed: ${finalMarketplaceUrl}`);
-          await writeLogToFirestore("info", `Otonom Adım 3 BAŞARIYLI (${platform}): ${finalMarketplaceUrl}`, "MARKETPLACE");
+          // 1. Create Product
+          const productResponse = await axios.post('https://api.lemonsqueezy.com/v1/products', {
+            data: {
+              type: 'products',
+              attributes: {
+                name: newProduct.title,
+                description: newProduct.description,
+              },
+              relationships: {
+                store: {
+                  data: {
+                    type: 'stores',
+                    id: storeId
+                  }
+                }
+              }
+            }
+          }, { headers, timeout: 30000 });
 
-        } catch (listingErr: any) {
-          console.error(`[${platform.toUpperCase()}-CRITICAL]`, listingErr.message, listingErr.response?.data || "");
-          await writeLogToFirestore("error", `Otonom Adım 3 HATASI (${platform}): ${listingErr.message}`, "MARKETPLACE");
-          // Eğer bu platformda hata alınırsa, döngü bir sonraki platformu deneyecek.
+          const lemonProductId = productResponse.data.data.id;
+
+          // 2. Create Variant (Price)
+          const variantResponse = await axios.post('https://api.lemonsqueezy.com/v1/variants', {
+            data: {
+              type: 'variants',
+              attributes: {
+                name: "Standard License",
+                price: priceCents,
+                is_subscription: false,
+              },
+              relationships: {
+                product: {
+                  data: {
+                    type: 'products',
+                    id: lemonProductId
+                  }
+                }
+              }
+            }
+          }, { headers, timeout: 30000 });
+
+          finalMarketplaceUrl = variantResponse.data.data.attributes.buy_now_url;
+        } else if (chosenPlatform === "Etsy") {
+          // ETSY ENTEGRASYONU İÇİN YER TUTUCU
+          // API anahtarları .env dosyasına eklendiğinde bu bölüm doldurulacak.
+          throw new Error("Etsy entegrasyonu henüz tamamlanmadı. API anahtarları eklendikten sonra bu bölüm kodlanacak.");
         }
-      }
 
-      if (!listedSuccessfully) {
-        await writeLogToFirestore("error", `Otonom Adım 3 HATASI: Tüm platformlarda listeleme denemeleri başarısız oldu.`, "SYSTEM");
+        newProduct.is_listed = true;
+        newProduct.marketplace_url = finalMarketplaceUrl;
+        artifact.is_listed = true;
+        artifact.status = "listed";
+
+        console.log(`[${chosenPlatform.toUpperCase()}-SUCCESS] Product listed: ${finalMarketplaceUrl}`);
+        await writeLogToFirestore("info", `Otonom Adım 3 BAŞARIYLI (${chosenPlatform}): ${finalMarketplaceUrl}`, "MARKETPLACE");
+
+      } catch (listingErr: any) {
+        console.error(`[${chosenPlatform.toUpperCase()}-CRITICAL]`, listingErr.message, listingErr.response?.data || "");
+        await writeLogToFirestore("error", `Otonom Adım 3 HATASI (${chosenPlatform}): ${listingErr.message}`, "MARKETPLACE");
         newProduct.is_listed = false;
         newProduct.marketplace_url = "";
         artifact.is_analyzed = true;
@@ -835,7 +827,6 @@ Aşağıdaki JSON formatında bir yanıt ver (başka hiçbir şey ekleme, sadece
       id: proposalId,
       title: parsed.title,
       target_foundation: targetFoundation,
-      foundation_url: "https://example.com/apply", // Placeholder URL
       concept_summary: parsed.concept_summary || "N/A",
       full_proposal_text: parsed.full_proposal_text,
       requested_amount: requestedAmount,
@@ -999,6 +990,29 @@ Direktiflerin şu formatta bir JSON nesnesi olmalı:
   }
 }
 
+app.get("/api/active-projects", async (req, res) => {
+  const list = await getActiveProjectsFromFirestore();
+  res.json(list);
+});
+
+app.post("/api/grant-proposals/update-status/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  if (db && id && status) {
+    await setDoc(doc(db, "grant_proposals", id), { status }, { merge: true });
+    await writeLogToFirestore("info", `Hibe başvurusu durumu manuel olarak güncellendi: ${id} -> ${status}`, "SYSTEM");
+
+    // Eğer durum 'fonlandı' ise, projeyi başlat
+    if (status === 'funded') {
+      const proposalDoc = await getDoc(doc(db, "grant_proposals", id));
+      if (proposalDoc.exists()) {
+        initiateFundedProject(proposalDoc.data() as GrantProposal);
+      }
+    }
+  }
+  res.json({ success: true });
+});
+
 // Dynamic autonomous scheduler settings
 const otonomSettings = {
   is_active: true,
@@ -1032,40 +1046,6 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-app.get("/api/active-projects", async (req, res) => {
-  const list = await getActiveProjectsFromFirestore();
-  res.json(list);
-});
-
-app.post("/api/grant-proposals/update-status/:id", async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  if (db && id && status) {
-    await setDoc(doc(db, "grant_proposals", id), { status }, { merge: true });
-    await writeLogToFirestore("info", `Hibe başvurusu durumu manuel olarak güncellendi: ${id} -> ${status}`, "SYSTEM");
-
-    // Eğer durum 'fonlandı' ise, projeyi başlat
-    if (status === 'funded') {
-      const proposalDoc = await getDoc(doc(db, "grant_proposals", id));
-      if (proposalDoc.exists()) {
-        initiateFundedProject(proposalDoc.data() as GrantProposal);
-      }
-    }
-  }
-  res.json({ success: true });
-});
-
-app.post("/api/otonom/trigger", async (req, res) => {
-  try {
-    await writeLogToFirestore("info", "Manuel Otonom Boru Hattı Tetiklendi!", "SYSTEM");
-    executeOtonomPipeline().catch(err => {
-      console.error("Manual otonom execution background error:", err);
-    });
-    res.json({ success: true, message: "Otonom boru hattı arka planda başlatıldı." });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // API Routes
 
@@ -1090,37 +1070,31 @@ app.post("/api/settings/otonom", async (req, res) => {
   res.json({ success: true, settings: otonomSettings });
 });
 
+app.post("/api/otonom/trigger", async (req, res) => {
+  try {
+    await writeLogToFirestore("info", "Manuel Otonom Boru Hattı Tetiklendi!", "SYSTEM");
+    executeOtonomPipeline().catch(err => {
+      console.error("Manual otonom execution background error:", err);
+    });
+    res.json({ success: true, message: "Otonom boru hattı arka planda başlatıldı." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Grant Proposal Endpoints
 app.get("/api/grant-proposals", async (req, res) => {
   const list = await getGrantProposalsFromFirestore();
   res.json(list);
 });
 
-app.post("/api/grant-proposals/prepare", async (req, res) => {
+app.post("/api/grant-proposals/generate", async (req, res) => {
   try {
     const proposal = await generateAndSubmitGrantProposal();
     res.json({ success: true, proposal });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// 2. Get Artifacts
-app.get("/api/artifacts", async (req, res) => {
-  const list = await getArtifactsFromFirestore();
-  res.json(list);
-});
-
-// 3. Get Products
-app.get("/api/products", async (req, res) => {
-  const list = await getProductsFromFirestore();
-  res.json(list);
-});
-
-// 4. Get Logs
-app.get("/api/logs", async (req, res) => {
-  const list = await getLogsFromFirestore();
-  res.json(list);
 });
 
 // 5. Clear Logs
@@ -1142,6 +1116,24 @@ app.post("/api/logs/clear", async (req, res) => {
   await writeLogToFirestore("info", "İşlem log geçmişi temizlendi.", "SYSTEM");
   const list = await getLogsFromFirestore();
   res.json({ success: true, logs: list });
+});
+
+// 2. Get Artifacts
+app.get("/api/artifacts", async (req, res) => {
+  const list = await getArtifactsFromFirestore();
+  res.json(list);
+});
+
+// 3. Get Products
+app.get("/api/products", async (req, res) => {
+  const list = await getProductsFromFirestore();
+  res.json(list);
+});
+
+// 4. Get Logs
+app.get("/api/logs", async (req, res) => {
+  const list = await getLogsFromFirestore();
+  res.json(list);
 });
 
 // 6. Manual Digger Scrape (Wayback Machine)
