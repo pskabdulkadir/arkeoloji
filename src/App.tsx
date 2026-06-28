@@ -308,10 +308,7 @@ export default function App() {
       return;
     }
     // Validate custom credentials or fallback
-    if (
-      (email === "psikologabdulkadirkan@gmail.com" && password === "Abdulkadir1983") ||
-      password === "cyberarch2026"
-    ) {
+    if (password === "cyberarch2026") {
       setIsAuthenticated(true);
       setAuthError("");
     } else {

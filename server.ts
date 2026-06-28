@@ -460,26 +460,23 @@ async function executeOtonomPipeline() {
 
       if (!token) throw new Error("Gumroad API key not configured!");
 
-      const formParams = new URLSearchParams();
-      formParams.append('product[name]', String(newProduct.title || "Siber Antika"));
-      formParams.append('product[price_cents]', String(priceCents));
-      formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
+      const productData = {
+        name: String(newProduct.title || "Siber Antika"),
+        price: priceCents, // Gumroad API v2 price'ı cent olarak bekler
+        description: String(newProduct.description || "Cyber-Archeologist Series"),
+        // Diğer ürün ayarları buraya eklenebilir
+      };
 
       console.log("[GUMROAD-REQUEST]", {
         title: newProduct.title,
-        priceCents,
-        price,
-        formString: formParams.toString().substring(0, 200)
+        price: priceCents,
       });
 
       const response = await axios.post(
         'https://api.gumroad.com/v2/products',
-        formParams.toString(),
+        productData,
         {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
           timeout: 30000
         }
       );
