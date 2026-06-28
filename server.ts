@@ -430,18 +430,18 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    // --- GUMROAD URL-ENCODED FORM POST ---
-    const formParams = new URLSearchParams();
-    formParams.append('name', String(artifact.name || "Siber Antika"));
-    formParams.append('price_cents', '990');
-    formParams.append('description', String(artifact.description || "Cyber-Archeologist Series"));
+    // --- GUMROAD DIRECT OBJECT POST ---
+    const gumroadData = {
+      name: String(artifact.name || "Siber Antika"),
+      price_cents: 990,
+      description: String(artifact.description || "Cyber-Archeologist Series")
+    };
 
-    console.log("[LIVE-FORCE] Gumroad API'sine URL-Encoded Form verisi basılıyor!");
+    console.log("[DIRECT-POST] Gumroad'a obje gönderiliyor:", gumroadData);
 
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', gumroadData, {
       headers: {
-        "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
       },
       timeout: 30000
     });
@@ -895,18 +895,18 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // --- GUMROAD URL-ENCODED FORM POST ---
-      const formParams = new URLSearchParams();
-      formParams.append('name', String(product.title || "Siber Antika"));
-      formParams.append('price_cents', '990');
-      formParams.append('description', String(product.description || "Cyber-Archeologist Series"));
+      // --- GUMROAD DIRECT OBJECT POST ---
+      const gumroadData = {
+        name: String(product.title || "Siber Antika"),
+        price_cents: 990,
+        description: String(product.description || "Cyber-Archeologist Series")
+      };
 
-      console.log("[LIVE-FORCE] Gumroad API'sine URL-Encoded Form verisi basılıyor!");
+      console.log("[DIRECT-POST] Gumroad'a obje gönderiliyor:", gumroadData);
 
-      const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+      const response = await axios.post('https://api.gumroad.com/v2/products', gumroadData, {
         headers: {
-          "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-          "Content-Type": "application/x-www-form-urlencoded"
+          "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
         },
         timeout: 30000
       });
