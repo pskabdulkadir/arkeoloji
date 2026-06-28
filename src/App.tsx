@@ -144,7 +144,8 @@ export default function App() {
 
   // Manual Gumroad Form State
   const [gumroadModalOpen, setGumroadModalOpen] = useState(false);
-  const [gumroadModalData, setGumroadModalData] = useState<{ productId: string; title: string; price: number; description: string } | null>(null);
+  const [gumroadModalData, setGumroadModalData] = useState<{ productId: string; title: string; price: number; description: string; image_url?: string } | null>(null);
+  const [gumroadResult, setGumroadResult] = useState<{ success: boolean; url?: string; error?: string } | null>(null);
 
   const handleToggleOtonom = async () => {
     try {
@@ -374,10 +375,12 @@ export default function App() {
         productId: product.id,
         title: product.title,
         price: product.price || 25,
-        description: product.description || ""
+        description: product.description || "",
+        image_url: product.image_url || ""
       };
       console.log("[GUMROAD-MODAL] Modal data hazırlanıyor:", modalData);
       setGumroadModalData(modalData);
+      setGumroadResult(null);
       setGumroadModalOpen(true);
       console.log("[GUMROAD-MODAL] Modal açılıyor...");
     } else {
@@ -388,6 +391,7 @@ export default function App() {
   const handleGumroadSubmit = async () => {
     if (!gumroadModalData) return;
     setIsListingId(gumroadModalData.productId);
+    setGumroadResult(null);
     try {
       const res = await fetch("/api/products/list-gumroad-manual", {
         method: "POST",
@@ -399,13 +403,16 @@ export default function App() {
           description: gumroadModalData.description
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGumroadResult({ success: true, url: data.url });
         await fetchData();
-        setGumroadModalOpen(false);
-        setGumroadModalData(null);
+      } else {
+        setGumroadResult({ success: false, error: data.error || "Bilinmeyen hata" });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Gumroad listing error:", err);
+      setGumroadResult({ success: false, error: err.message });
     } finally {
       setIsListingId(null);
     }
@@ -1312,56 +1319,95 @@ export default function App() {
       {/* FOOTER METADATA */}
       {/* Manual Gumroad Form Modal */}
       {gumroadModalOpen && gumroadModalData && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-4">Gumroad Ürünü Manuel Olarak Oluştur</h3>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-mono text-slate-400">Başlık</label>
-                <input
-                  type="text"
-                  value={gumroadModalData.title}
-                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, title: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
-                />
+            {gumroadResult && (
+              <div className={`mb-6 p-4 rounded-lg border ${gumroadResult.success ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border-red-500/30 text-red-400"}`}>
+                {gumroadResult.success ? (
+                  <div>
+                    <p className="font-bold mb-2">✅ Ürün başarıyla oluşturuldu!</p>
+                    <p className="text-xs mb-2">Gumroad Linki:</p>
+                    <a href={gumroadResult.url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:text-emerald-200 underline break-all font-mono text-xs">
+                      {gumroadResult.url}
+                    </a>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="font-bold mb-1">❌ Hata:</p>
+                    <p className="text-xs">{gumroadResult.error}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Resim Önizlemesi */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-mono text-slate-400">Ürün Görseli</label>
+                {gumroadModalData.image_url && (
+                  <img src={gumroadModalData.image_url} alt={gumroadModalData.title} className="w-full h-48 object-cover rounded border border-slate-700" />
+                )}
               </div>
 
-              <div>
-                <label className="text-xs font-mono text-slate-400">Fiyat ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={gumroadModalData.price}
-                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, price: parseFloat(e.target.value) })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
-                />
-              </div>
+              {/* Form Alanları */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-mono text-slate-400">Başlık</label>
+                  <input
+                    type="text"
+                    value={gumroadModalData.title}
+                    onChange={(e) => setGumroadModalData({ ...gumroadModalData, title: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
+                    disabled={isListingId !== null}
+                  />
+                </div>
 
-              <div>
-                <label className="text-xs font-mono text-slate-400">Açıklama</label>
-                <textarea
-                  value={gumroadModalData.description}
-                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, description: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1 h-24"
-                />
+                <div>
+                  <label className="text-xs font-mono text-slate-400">Fiyat ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={gumroadModalData.price}
+                    onChange={(e) => setGumroadModalData({ ...gumroadModalData, price: parseFloat(e.target.value) })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
+                    disabled={isListingId !== null}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-mono text-slate-400">Açıklama</label>
+                  <textarea
+                    value={gumroadModalData.description}
+                    onChange={(e) => setGumroadModalData({ ...gumroadModalData, description: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1 h-20"
+                    disabled={isListingId !== null}
+                  />
+                </div>
               </div>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setGumroadModalOpen(false)}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-mono text-xs transition"
-              >
-                İptal Et
-              </button>
-              <button
-                onClick={handleGumroadSubmit}
+                onClick={() => {
+                  setGumroadModalOpen(false);
+                  setGumroadResult(null);
+                }}
                 disabled={isListingId !== null}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white px-4 py-2 rounded font-mono text-xs transition font-bold"
+                className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white px-4 py-2 rounded font-mono text-xs transition"
               >
-                {isListingId ? "Gönderiliyor..." : "Gumroad'a Ekle"}
+                {gumroadResult?.success ? "Kapat" : "İptal Et"}
               </button>
+              {!gumroadResult?.success && (
+                <button
+                  onClick={handleGumroadSubmit}
+                  disabled={isListingId !== null}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white px-4 py-2 rounded font-mono text-xs transition font-bold"
+                >
+                  {isListingId ? "Gönderiliyor..." : "Gumroad'a Ekle"}
+                </button>
+              )}
             </div>
           </div>
         </div>
