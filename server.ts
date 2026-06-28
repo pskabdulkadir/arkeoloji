@@ -369,23 +369,42 @@ async function executeOtonomPipeline() {
       "synth_code": "[Only if vapor_synth: complete Web Audio API Javascript code or empty string]"
     }`;
 
-    const aiRes = await axios.post("https://text.pollinations.ai/", {
-      messages: [{ role: "user", content: curatorPrompt }],
-      model: "openai"
-    }, { timeout: 30000 });
+    try {
+      const aiRes = await axios.post("https://text.pollinations.ai/", {
+        messages: [{ role: "user", content: curatorPrompt }],
+        model: "openai"
+      }, { timeout: 30000 });
 
-    const text = aiRes.data || "";
-    const cleanJson = text.trim().replace(/^```json/, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(cleanJson);
+      const text = typeof aiRes.data === "string" ? aiRes.data : JSON.stringify(aiRes.data);
+      const cleanJson = text.trim().replace(/^```json/, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(cleanJson);
 
-    resultTitle = parsed.title || `${artifact.name} - Glitch Art Echo`;
-    resultDescription = parsed.description || `Salvaged from the deep archive. Undergoing quantum decoding. Ready for listing.`;
-    resultCodeContent = parsed.code_content || "";
-    resultPdfContentText = parsed.pdf_content_text || "";
-    resultPromptPackage = parsed.prompt_package || "";
-    resultGameCode = parsed.game_code || "";
-    resultSynthCode = parsed.synth_code || "";
+      resultTitle = parsed.title || `${artifact.name} - Glitch Art Echo`;
+      resultDescription = parsed.description || `Salvaged from the deep archive. Undergoing quantum decoding. Ready for listing.`;
+      resultCodeContent = parsed.code_content || "";
+      resultPdfContentText = parsed.pdf_content_text || "";
+      resultPromptPackage = parsed.prompt_package || "";
+      resultGameCode = parsed.game_code || "";
+      resultSynthCode = parsed.synth_code || "";
 
+      await writeLogToFirestore("info", `Otonom Adım 2.1: AI kürasyon başarılı - ${resultTitle} (${selectedType})`, "SYSTEM");
+    } catch (aiErr: any) {
+      await writeLogToFirestore("warn", `Otonom AI hatası (${aiErr.message}). Varsayılan template kullanılıyor.`, "SYSTEM");
+      resultTitle = `${artifact.name} - Glitch Art Echo`;
+      resultDescription = `### COGNITIVE DECAY DATA\nRecovered from the depths of a long-decommissioned database. The visual artifacts trace high-frequency packet loss originating from a vintage server.\n\n### GLITCH NARRATIVE\nThis unique art piece represents the intersection of forgotten digital monuments and autonomous cybernetic rediscovery.\n\n### DIGITAL SPECIFICATION\nA premium collectible for digital artifact hunters and vaporwave design curators.`;
+
+      if (selectedType === "ui_kit") {
+        resultCodeContent = `<div class="p-6 bg-black text-green-400 border-2 border-green-500 font-mono rounded"><p>Retro UI Kit Component</p></div>`;
+      } else if (selectedType === "cyber_zine") {
+        resultPdfContentText = `Siber-Arkeoloji Analiz Raporu\n\nBu eserin detaylı analizi: ${artifact.name}`;
+      } else if (selectedType === "cyber_prompt") {
+        resultPromptPackage = `Prompt 1: 3D wireframe cyber design, neon aesthetic --ar 16:9\nPrompt 2: Retro pixel art, glowing accents, nostalgic portal\nPrompt 3: Vintage green terminal, glitch aesthetic, scanlines`;
+      } else if (selectedType === "terminal_game") {
+        resultGameCode = `<!DOCTYPE html><html><head><style>body{background:#000;color:#0f0;font-family:monospace}</style></head><body><h2>RETRO TERMINAL</h2><p>Game initialized</p></body></html>`;
+      } else if (selectedType === "vapor_synth") {
+        resultSynthCode = `const audioCtx = new AudioContext(); console.log("Vapor Synth initialized");`;
+      }
+    }
 
     const newProduct: any = {
       id: productId,
