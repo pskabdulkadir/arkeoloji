@@ -430,17 +430,18 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    // --- GUMROAD FORM POST - ELLE QUERY STRING ---
-    const name = String(artifact.name || "Siber Antika");
-    const description = String(artifact.description || "Cyber-Archeologist Series");
-    const queryString = `name=${encodeURIComponent(name)}&price_cents=990&description=${encodeURIComponent(description)}`;
+    // --- GUMROAD URL-ENCODED FORM POST ---
+    const formParams = new URLSearchParams();
+    formParams.append('name', String(artifact.name || "Siber Antika"));
+    formParams.append('price_cents', '990');
+    formParams.append('description', String(artifact.description || "Cyber-Archeologist Series"));
 
-    console.log("[FINAL-FIX] Query string:", queryString);
+    console.log("[LIVE-FORCE] Gumroad API'sine URL-Encoded Form verisi basılıyor!");
 
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', queryString, {
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        "Content-Type": "application/x-www-form-urlencoded"
       },
       timeout: 30000
     });
@@ -894,17 +895,18 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // --- GUMROAD FORM POST - ELLE QUERY STRING ---
-      const name = String(product.title || "Siber Antika");
-      const description = String(product.description || "Cyber-Archeologist Series");
-      const queryString = `name=${encodeURIComponent(name)}&price_cents=990&description=${encodeURIComponent(description)}`;
+      // --- GUMROAD URL-ENCODED FORM POST ---
+      const formParams = new URLSearchParams();
+      formParams.append('name', String(product.title || "Siber Antika"));
+      formParams.append('price_cents', '990');
+      formParams.append('description', String(product.description || "Cyber-Archeologist Series"));
 
-      console.log("[FINAL-FIX] Query string:", queryString);
+      console.log("[LIVE-FORCE] Gumroad API'sine URL-Encoded Form verisi basılıyor!");
 
-      const response = await axios.post('https://api.gumroad.com/v2/products', queryString, {
+      const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+          "Content-Type": "application/x-www-form-urlencoded"
         },
         timeout: 30000
       });
