@@ -454,81 +454,65 @@ async function executeOtonomPipeline() {
     let gumroadSuccess = false;
 
     try {
-      console.log("[STEP-3-DEBUG] newProduct fields:", {
-        title: newProduct.title,
-        price: newProduct.price,
-        priceCents: Math.round((newProduct.price || 0) * 100),
-        description: newProduct.description
-      });
-
       const priceCents = Math.max(100, Math.round((newProduct.price || 25) * 100));
       const token = process.env.GUMROAD_API_KEY || "";
 
-      const formData = new URLSearchParams();
-      formData.append('name', String(newProduct.title || "Siber Antika"));
-      formData.append('price_cents', String(priceCents));
-      formData.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
+      if (!token) throw new Error("Gumroad API key not configured!");
 
-      const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
-      console.log("[STEP-3-PAYLOAD]", { priceCents, title: newProduct.title, formData: formData.toString() });
+      const formParams = new URLSearchParams();
+      formParams.append('product[name]', String(newProduct.title || "Siber Antika"));
+      formParams.append('product[price_cents]', String(priceCents));
+      formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
 
-      const gumroadRes = await axios.post(apiUrl, formData.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        timeout: 30000
-      });
+      console.log("[GUMROAD] Creating product with wrapped parameters");
 
-      console.log("[STEP-3-RESPONSE-FULL]", { status: gumroadRes.status, data: gumroadRes.data });
-
-      // Check if response indicates error
-      if (gumroadRes.data?.success === false) {
-        throw new Error(`Gumroad API error: ${gumroadRes.data.message}`);
-      }
-
-      if (gumroadRes?.data?.product?.short_url && gumroadRes?.data?.product?.id) {
-        finalMarketplaceUrl = gumroadRes.data.product.short_url;
-        gumroadSuccess = true;
-
-        const gumId = gumroadRes.data.product.id;
-        console.log("[STEP-3-PUBLISH-START] Publish işlemi başlıyor, ID:", gumId);
-
-        try {
-          const publishUrl = `https://api.gumroad.com/v2/products/${gumId}/publish?access_token=${encodeURIComponent(process.env.GUMROAD_API_KEY || "")}`;
-
-          await axios.put(publishUrl, {}, {
-            timeout: 30000
-          });
-          console.log("[STEP-3-PUBLISH-SUCCESS] Yayına alındı!");
-          await writeLogToFirestore("info", `Otonom Adım 3.1: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
-        } catch (pubErr: any) {
-          console.log("[STEP-3-PUBLISH-ERROR]", pubErr.message);
-          await writeLogToFirestore("warn", `Gumroad publish hatası (kritik değil): ${pubErr.message}`, "SYSTEM");
+      const response = await axios.post(
+        'https://api.gumroad.com/v2/products',
+        formParams.toString(),
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          timeout: 30000
         }
+      );
 
-        newProduct.is_listed = true;
-        newProduct.marketplace_url = finalMarketplaceUrl;
-        artifact.is_listed = true;
-        artifact.status = "listed";
-
-        console.log("[STEP-3-SUCCESS] Adım 3 başarılı!");
-        await writeLogToFirestore("info", `Otonom Adım 3 BAŞARILI: Gumroad ürünü otomatik olarak listelendi! -> ${finalMarketplaceUrl}`, "SYSTEM");
-      } else {
-        throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes?.data || {})}`);
+      if (!response.data?.product?.id || !response.data?.product?.short_url) {
+        throw new Error(`Gumroad API returned invalid response: ${JSON.stringify(response.data)}`);
       }
+
+      finalMarketplaceUrl = response.data.product.short_url;
+      const gumId = response.data.product.id;
+
+      try {
+        await axios.put(
+          `https://api.gumroad.com/v2/products/${gumId}/publish`,
+          {},
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+            timeout: 30000
+          }
+        );
+      } catch (pubErr: any) {
+        console.log("[GUMROAD-PUBLISH-WARN]", pubErr.message);
+      }
+
+      newProduct.is_listed = true;
+      newProduct.marketplace_url = finalMarketplaceUrl;
+      artifact.is_listed = true;
+      artifact.status = "listed";
+
+      console.log(`[GUMROAD-SUCCESS] Product listed: ${finalMarketplaceUrl}`);
+      await writeLogToFirestore("info", `Otonom Adım 3 BAŞARIYLI: ${finalMarketplaceUrl}`, "SYSTEM");
     } catch (gumErr: any) {
-      console.log("[STEP-3-CATCH-ERROR]", {
-        message: gumErr.message,
-        status: gumErr.response?.status,
-        statusText: gumErr.response?.statusText,
-        data: gumErr.response?.data,
-        config: { url: gumErr.config?.url, method: gumErr.config?.method }
-      });
-      await writeLogToFirestore("error", `Otonom Adım 3 HATASI: Gumroad API hatası -> ${gumErr.message}. API Response: ${JSON.stringify(gumErr.response?.data || {})}. Status: ${gumErr.response?.status || 'N/A'}.`, "SYSTEM");
+      console.error("[GUMROAD-CRITICAL]", gumErr.message, gumErr.response?.data || "");
+      await writeLogToFirestore("error", `Otonom Adım 3 HATASI: ${gumErr.message}`, "SYSTEM");
       newProduct.is_listed = false;
       newProduct.marketplace_url = "";
       artifact.is_analyzed = true;
       artifact.status = "analyzed";
+      throw gumErr;
     }
 
     if (db) {
