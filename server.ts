@@ -330,26 +330,26 @@ async function executeOtonomPipeline() {
     return;
   }
 
-  // GUMROAD API HIZ LİMİTİ KORUMASI
+  // GUMROAD API HIZ LİMİTİ KORUMASI (Gelişmiş)
   try {
-    const q = query(collection(db, "products"), orderBy("created_at", "desc"), limit(1));
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const q = query(
+      collection(db, "products"), 
+      where("is_listed", "==", true),
+      where("created_at", ">=", twentyFourHoursAgo)
+    );
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const lastProduct = snapshot.docs[0].data() as Product;
-      const lastCreationDate = new Date(lastProduct.created_at);
-      const now = new Date();
-      // Gumroad'un günlük 10 ürün limitini (yaklaşık 2.4 saatte bir ürün) aşmamak için güvenli bir aralık (3 saat) belirliyoruz.
-      const hoursSinceLastCreation = (now.getTime() - lastCreationDate.getTime()) / (1000 * 60 * 60);
-      
-      if (lastProduct.is_listed && hoursSinceLastCreation < 3) {
-        await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 3 saat içinde zaten bir ürün listelendi. Bu otonom döngü atlanıyor.`, "SYSTEM");
-        return; // Boru hattını çalıştırmadan çık
-      }
+    const listedTodayCount = snapshot.size;
+
+    if (listedTodayCount >= 9) { // Güvenlik payı bırakarak 9'da dur.
+      await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 24 saatte ${listedTodayCount} ürün listelendi. Günlük limit dolmak üzere. Bu otonom döngü atlanıyor.`, "SYSTEM");
+      return; // Boru hattını çalıştırmadan çık
     }
   } catch (checkErr: any) {
     // Bu kontrol sırasında bir hata olursa, sadece logla ve devam et. Ana işlevi durdurma.
     await writeLogToFirestore("error", `Gumroad hız limiti kontrolü sırasında hata: ${checkErr.message}`, "SYSTEM");
   }
+
 
   await writeLogToFirestore("info", "OTONOM BORU HATTI TETİKLENDİ: Wayback Scraper, Gemini Küratörü, Gumroad ve IPFS akışı başlıyor...", "SYSTEM");
   try {
@@ -433,6 +433,12 @@ async function executeOtonomPipeline() {
 
       await writeLogToFirestore("info", `Otonom Adım 2.1: AI kürasyon başarılı - ${resultTitle} (${selectedType})`, "SYSTEM");
     } catch (aiErr: any) {
+      // API Hız Limiti (429) hatası durumunda döngüyü durdur ve bir sonraki periyodu bekle.
+      if (axios.isAxiosError(aiErr) && aiErr.response?.status === 429) {
+        await writeLogToFirestore("warn", `Otonom AI servisi hız limitine takıldı (429). API'nin dinlenmesi için bu döngü durduruluyor.`, "SYSTEM");
+        return; // Boru hattını güvenli bir şekilde sonlandır.
+      }
+
       await writeLogToFirestore("warn", `Otonom AI hatası (${aiErr.message}). Varsayılan template kullanılıyor.`, "SYSTEM");
       resultTitle = `${artifact.name} - Glitch Art Echo`;
       resultDescription = `### COGNITIVE DECAY DATA\nRecovered from the depths of a long-decommissioned database. The visual artifacts trace high-frequency packet loss originating from a vintage server.\n\n### GLITCH NARRATIVE\nThis unique art piece represents the intersection of forgotten digital monuments and autonomous cybernetic rediscovery.\n\n### DIGITAL SPECIFICATION\nA premium collectible for digital artifact hunters and vaporwave design curators.`;
@@ -828,6 +834,13 @@ app.post("/api/artifacts/curate-gemini/:id", async (req, res) => {
 
       await writeLogToFirestore("info", `Ücretsiz Yapay Zeka analizi tamamlandı: ${resultTitle} (${selectedType})`, "GEMINI");
     } catch (aiErr: any) {
+      // API Hız Limiti (429) hatası durumunda döngüyü durdur ve bir sonraki periyodu bekle.
+      if (axios.isAxiosError(aiErr) && aiErr.response?.status === 429) {
+        await writeLogToFirestore("warn", `Manuel AI servisi hız limitine takıldı (429). Lütfen birkaç dakika bekleyip tekrar deneyin.`, "GEMINI");
+        // Manuel tetikleme olduğu için kullanıcıya hata döndür.
+        throw new Error("AI servisi şu anda meşgul (Hız Limiti). Lütfen birkaç dakika sonra tekrar deneyin.");
+      }
+
       await writeLogToFirestore("warn", `Pollinations AI sorgulaması başarısız oldu (${aiErr.message}). Varsayılan template kullanılıyor.`, "GEMINI");
       resultTitle = `${artifact.name} - Glitch Art Echo`;
       resultDescription = `### COGNITIVE DECAY DATA\nRecovered from the depths of a long-decommissioned database. The visual artifacts trace high-frequency packet loss originating from a vintage server.\n\n### GLITCH NARRATIVE\nThis unique art piece represents the intersection of forgotten digital monuments and autonomous cybernetic rediscovery.\n\n### DIGITAL SPECIFICATION\nA premium collectible for digital artifact hunters and vaporwave design curators.`;
