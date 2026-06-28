@@ -461,13 +461,13 @@ async function executeOtonomPipeline() {
         description: newProduct.description
       });
 
-      const priceCents = Math.round((newProduct.price || 25) * 100);
+      const priceCents = Math.max(100, Math.round((newProduct.price || 25) * 100));
       const token = process.env.GUMROAD_API_KEY || "";
 
       const formParams = new URLSearchParams();
-      formParams.append('name', String(newProduct.title || "Siber Antika"));
-      formParams.append('price_cents', String(priceCents));
-      formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
+      formParams.append('product[name]', String(newProduct.title || "Siber Antika"));
+      formParams.append('product[price_cents]', String(priceCents));
+      formParams.append('product[description]', String(newProduct.description || "Cyber-Archeologist Series"));
       formParams.append('access_token', token);
 
       console.log("[STEP-3-PAYLOAD]", { priceCents, title: newProduct.title });
@@ -937,9 +937,9 @@ app.post("/api/products/list-gumroad-manual", async (req, res) => {
 
     const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
     const formParams = new URLSearchParams();
-    formParams.append('name', String(title));
-    formParams.append('price_cents', String(price_cents));
-    formParams.append('description', String(description || ""));
+    formParams.append('product[name]', String(title));
+    formParams.append('product[price_cents]', String(Math.max(100, price_cents)));
+    formParams.append('product[description]', String(description || ""));
 
     console.log("[MANUAL-GUMROAD] Creating product:", { title, price_cents });
 
