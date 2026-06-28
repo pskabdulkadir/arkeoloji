@@ -464,23 +464,27 @@ async function executeOtonomPipeline() {
       const priceCents = Math.max(100, Math.round((newProduct.price || 25) * 100));
       const token = process.env.GUMROAD_API_KEY || "";
 
-      const payload = {
-        name: String(newProduct.title || "Siber Antika"),
-        price_cents: priceCents,
-        description: String(newProduct.description || "Cyber-Archeologist Series")
-      };
+      const formData = new URLSearchParams();
+      formData.append('name', String(newProduct.title || "Siber Antika"));
+      formData.append('price_cents', String(priceCents));
+      formData.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
 
       const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
-      console.log("[STEP-3-PAYLOAD]", payload);
+      console.log("[STEP-3-PAYLOAD]", { priceCents, title: newProduct.title, formData: formData.toString() });
 
-      const gumroadRes = await axios.post(apiUrl, payload, {
+      const gumroadRes = await axios.post(apiUrl, formData.toString(), {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
         timeout: 30000
       });
 
       console.log("[STEP-3-RESPONSE-FULL]", { status: gumroadRes.status, data: gumroadRes.data });
+
+      // Check if response indicates error
+      if (gumroadRes.data?.success === false) {
+        throw new Error(`Gumroad API error: ${gumroadRes.data.message}`);
+      }
 
       if (gumroadRes?.data?.product?.short_url && gumroadRes?.data?.product?.id) {
         finalMarketplaceUrl = gumroadRes.data.product.short_url;
@@ -937,16 +941,15 @@ app.post("/api/products/list-gumroad-manual", async (req, res) => {
     }
 
     const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
-    const payload = {
-      name: String(title),
-      price_cents: Math.max(100, price_cents),
-      description: String(description || "")
-    };
+    const formData = new URLSearchParams();
+    formData.append('name', String(title));
+    formData.append('price_cents', String(Math.max(100, price_cents)));
+    formData.append('description', String(description || ""));
 
-    console.log("[MANUAL-GUMROAD] Creating product:", payload);
+    console.log("[MANUAL-GUMROAD] Creating product:", { title, price_cents: Math.max(100, price_cents) });
 
-    const gumroadRes = await axios.post(apiUrl, payload, {
-      headers: { 'Content-Type': 'application/json' },
+    const gumroadRes = await axios.post(apiUrl, formData.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       timeout: 30000
     });
 
