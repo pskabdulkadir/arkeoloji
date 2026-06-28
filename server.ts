@@ -417,6 +417,23 @@ async function executeOtonomPipeline() {
     return;
   }
 
+  // GUMROAD API HIZ LİMİTİ KORUMASI (Gelişmiş)
+  try {
+    const products = await getProductsFromFirestore();
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const listedTodayCount = products.filter(p => 
+      p.is_listed && new Date(p.created_at) > twentyFourHoursAgo
+    ).length;
+
+    if (listedTodayCount >= 9) { // Güvenlik payı bırakarak 9'da dur.
+      await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 24 saatte ${listedTodayCount} ürün listelendi. Günlük limit dolmak üzere. Bu otonom döngü atlanıyor.`, "SYSTEM");
+      return; // Boru hattını çalıştırmadan çık
+    }
+  } catch (checkErr: any) {
+    // Bu kontrol sırasında bir hata olursa, sadece logla ve devam et. Ana işlevi durdurma.
+    await writeLogToFirestore("error", `Gumroad hız limiti kontrolü sırasında hata: ${checkErr.message}`, "SYSTEM");
+  }
+
 
   await writeLogToFirestore("info", "OTONOM BORU HATTI TETİKLENDİ: Wayback Scraper, Gemini Küratörü, Gumroad ve IPFS akışı başlıyor...", "SYSTEM");
   try {
@@ -571,27 +588,10 @@ async function executeOtonomPipeline() {
 
     let finalMarketplaceUrl = "";
     
-    // ÇEVRESEL FARKINDALIK: Kullanılabilir platformları kontrol et (Doğru yer)
     const availablePlatforms = [];
-    if (getStatus().gumroad_configured) {
-      const products = await getProductsFromFirestore();
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const gumroadListedToday = products.filter(p => 
-        p.is_listed && p.marketplace_url.includes('gumroad') && new Date(p.created_at) > twentyFourHoursAgo
-      ).length;
-      if (gumroadListedToday < 9) {
-        availablePlatforms.push("Gumroad");
-      } else {
-        await writeLogToFirestore("warn", "Çevresel Farkındalık: Gumroad günlük limitine ulaşıldı. Bu platform atlanıyor.", "SYSTEM");
-      }
-    }
+    if (getStatus().gumroad_configured) availablePlatforms.push("Gumroad");
     if (getStatus().lemonsqueezy_configured) availablePlatforms.push("LemonSqueezy");
     if (getStatus().etsy_configured) availablePlatforms.push("Etsy");
-
-    if (availablePlatforms.length === 0) {
-      await writeLogToFirestore("warn", "Çevresel Farkındalık: Kullanılabilir hiçbir satış platformu bulunamadı. Listeleme adımı atlanıyor.", "SYSTEM");
-      return; // Sadece listeleme adımını atla, döngüyü kırma
-    }
 
     if (availablePlatforms.length === 0) {
       await writeLogToFirestore("warn", "Hiçbir satış platformu (Gumroad, Lemon Squeezy) yapılandırılmamış. Adım 3 atlanıyor.", "MARKETPLACE");
@@ -829,6 +829,7 @@ Aşağıdaki JSON formatında bir yanıt ver (başka hiçbir şey ekleme, sadece
       id: proposalId,
       title: parsed.title,
       target_foundation: targetFoundation,
+      foundation_url: "https://example.com/apply", // Placeholder URL
       concept_summary: parsed.concept_summary || "N/A",
       full_proposal_text: parsed.full_proposal_text,
       requested_amount: requestedAmount,
@@ -997,6 +998,24 @@ app.get("/api/active-projects", async (req, res) => {
   res.json(list);
 });
 
+app.post("/api/grant-proposals/update-status/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  if (db && id && status) {
+    await setDoc(doc(db, "grant_proposals", id), { status }, { merge: true });
+    await writeLogToFirestore("info", `Hibe başvurusu durumu manuel olarak güncellendi: ${id} -> ${status}`, "SYSTEM");
+
+    // Eğer durum 'fonlandı' ise, projeyi başlat
+    if (status === 'funded') {
+      const proposalDoc = await getDoc(doc(db, "grant_proposals", id));
+      if (proposalDoc.exists()) {
+        initiateFundedProject(proposalDoc.data() as GrantProposal);
+      }
+    }
+  }
+  res.json({ success: true });
+});
+
 // Dynamic autonomous scheduler settings
 const otonomSettings = {
   is_active: true,
@@ -1120,24 +1139,6 @@ app.post("/api/logs/clear", async (req, res) => {
   res.json({ success: true, logs: list });
 });
 
-// 2. Get Artifacts
-app.get("/api/artifacts", async (req, res) => {
-  const list = await getArtifactsFromFirestore();
-  res.json(list);
-});
-
-// 3. Get Products
-app.get("/api/products", async (req, res) => {
-  const list = await getProductsFromFirestore();
-  res.json(list);
-});
-
-// 4. Get Logs
-app.get("/api/logs", async (req, res) => {
-  const list = await getLogsFromFirestore();
-  res.json(list);
-});
-
 // 6. Manual Digger Scrape (Wayback Machine)
 app.post("/api/artifacts/dig-wayback", async (req, res) => {
   try {
@@ -1157,6 +1158,24 @@ app.post("/api/artifacts/dig-wayback", async (req, res) => {
     await writeLogToFirestore("error", `Dig-wayback error: ${err.message}`, "DIGGER");
     res.status(500).json({ error: err.message });
   }
+});
+
+// 2. Get Artifacts
+app.get("/api/artifacts", async (req, res) => {
+  const list = await getArtifactsFromFirestore();
+  res.json(list);
+});
+
+// 3. Get Products
+app.get("/api/products", async (req, res) => {
+  const list = await getProductsFromFirestore();
+  res.json(list);
+});
+
+// 4. Get Logs
+app.get("/api/logs", async (req, res) => {
+  const list = await getLogsFromFirestore();
+  res.json(list);
 });
 
 // ==========================================

@@ -408,22 +408,6 @@ export default function App() {
     }
   };
 
-  const handleSimulatePurchase = async (productId: string) => {
-    try {
-      const res = await fetch(`/api/products/simulate-purchase/${productId}`, {
-        method: "POST"
-      });
-      if (res.ok) {
-        // playCheckoutSound(); // This function was removed, can be re-added if needed
-        setPurchaseSuccessId(productId);
-        setTimeout(() => setPurchaseSuccessId(null), 4000);
-        await fetchData();
-      }
-    } catch (err) {
-      console.error("Simulation purchase error:", err);
-    }
-  };
-
   // Module 3 Manual Trigger: Gemini Curation
   const handleGeminiCuration = async (id: string) => {
     setIsAnalyzing(true);
