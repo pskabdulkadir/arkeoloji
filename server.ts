@@ -445,20 +445,23 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 2 Başarılı: Eser '${resultTitle}' (${selectedType}) kürasyonu tamamlandı ve kaydedildi.`, "SYSTEM");
 
     // Adım 3: Gumroad Otonom Entegrasyonu (Doğru Parametre Formatı ile)
-    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API otonom çağrısı başlatılıyor (Doğru parametre sarmallaması ile)...`, "SYSTEM");
+    console.log("[STEP-3-START] Adım 3 başlıyor...");
+    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API otonom çağrısı başlatılıyor...`, "SYSTEM");
 
     let finalMarketplaceUrl = "";
     let gumroadSuccess = false;
 
     try {
+      console.log("[STEP-3-DEBUG] newProduct.title:", newProduct.title, "newProduct.price:", newProduct.price);
+
       const formParams = new URLSearchParams();
       formParams.append('name', String(newProduct.title || "Siber Antika"));
-      formParams.append('price_cents', String(Math.round(newProduct.price * 100))); // Basit format
+      formParams.append('price_cents', String(Math.round(newProduct.price * 100)));
       formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
       formParams.append('access_token', process.env.GUMROAD_API_KEY || "");
 
-      console.log("[AUTOMATION-ENFORCED] Manuel form iptal edildi. Otonom API tetikleniyor...");
-      console.log("[GUMROAD-REQUEST] Payload:", formParams.toString());
+      console.log("[STEP-3-PAYLOAD] Gumroad payload hazır, API çağrısı yapılıyor...");
+      console.log("[STEP-3-TOKEN-CHECK] Token length:", (process.env.GUMROAD_API_KEY || "").length);
 
       const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
@@ -467,13 +470,15 @@ async function executeOtonomPipeline() {
         timeout: 30000
       });
 
-      console.log("[GUMROAD-RESPONSE] Cevap:", JSON.stringify(gumroadRes.data));
+      console.log("[STEP-3-RESPONSE] Gumroad cevap alındı:", JSON.stringify(gumroadRes.data).substring(0, 200));
 
       if (gumroadRes?.data?.product?.short_url && gumroadRes?.data?.product?.id) {
         finalMarketplaceUrl = gumroadRes.data.product.short_url;
         gumroadSuccess = true;
 
         const gumId = gumroadRes.data.product.id;
+        console.log("[STEP-3-PUBLISH-START] Publish işlemi başlıyor, ID:", gumId);
+
         try {
           const publishParams = new URLSearchParams();
           publishParams.append('access_token', process.env.GUMROAD_API_KEY || "");
@@ -484,8 +489,10 @@ async function executeOtonomPipeline() {
               'Content-Type': 'application/x-www-form-urlencoded'
             }
           });
+          console.log("[STEP-3-PUBLISH-SUCCESS] Yayına alındı!");
           await writeLogToFirestore("info", `Otonom Adım 3.1: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
         } catch (pubErr: any) {
+          console.log("[STEP-3-PUBLISH-ERROR]", pubErr.message);
           await writeLogToFirestore("warn", `Gumroad publish hatası (kritik değil): ${pubErr.message}`, "SYSTEM");
         }
 
@@ -494,11 +501,13 @@ async function executeOtonomPipeline() {
         artifact.is_listed = true;
         artifact.status = "listed";
 
+        console.log("[STEP-3-SUCCESS] Adım 3 başarılı!");
         await writeLogToFirestore("info", `Otonom Adım 3 BAŞARILI: Gumroad ürünü otomatik olarak listelendi! -> ${finalMarketplaceUrl}`, "SYSTEM");
       } else {
         throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes?.data || {})}`);
       }
     } catch (gumErr: any) {
+      console.log("[STEP-3-CATCH-ERROR] Hata yakalandı:", gumErr.message, "Status:", gumErr.response?.status);
       await writeLogToFirestore("error", `Otonom Adım 3 HATASI: Gumroad API hatası -> ${gumErr.message}. Status: ${gumErr.response?.status || 'N/A'}.`, "SYSTEM");
       newProduct.is_listed = false;
       newProduct.marketplace_url = "";
@@ -507,11 +516,14 @@ async function executeOtonomPipeline() {
     }
 
     if (db) {
+      console.log("[FIRESTORE-WRITE] Adım 3 sonrası Firestore yazılıyor...");
       await setDoc(doc(db, "products", productId), newProduct);
       await setDoc(doc(db, "artifacts", artifact.id), artifact);
+      console.log("[FIRESTORE-WRITE-DONE] Firestore yazması tamamlandı!");
     }
 
     // Adım 4: IPFS Merkezsiz Arşivleme (Optional)
+    console.log("[STEP-4-START] Adım 4 başlıyor...");
     await writeLogToFirestore("info", `Otonom Adım 4: IPFS merkezsiz arşivleme işlemi başlatılıyor...`, "SYSTEM");
 
     if (!process.env.IPFS_API_URL) {
