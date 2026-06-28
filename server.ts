@@ -391,7 +391,7 @@ async function getDynamicConfiguration(): Promise<{ productType: Product['produc
           if (!acc[p.product_type]) {
             acc[p.product_type] = 0;
           }
-          acc[p.product_type] += p.sales_count;
+          acc[p.product_type] += p.sales_count || 0;
           return acc;
         }, {} as Record<Product['product_type'], number>);
 
@@ -419,14 +419,11 @@ async function executeOtonomPipeline() {
 
   // GUMROAD API HIZ LİMİTİ KORUMASI (Gelişmiş)
   try {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const q = query(
-      collection(db, "products"), 
-      where("is_listed", "==", true),
-      where("created_at", ">=", twentyFourHoursAgo)
-    );
-    const snapshot = await getDocs(q);
-    const listedTodayCount = snapshot.size;
+    const products = await getProductsFromFirestore();
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const listedTodayCount = products.filter(p => 
+      p.is_listed && new Date(p.created_at) > twentyFourHoursAgo
+    ).length;
 
     if (listedTodayCount >= 9) { // Güvenlik payı bırakarak 9'da dur.
       await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 24 saatte ${listedTodayCount} ürün listelendi. Günlük limit dolmak üzere. Bu otonom döngü atlanıyor.`, "SYSTEM");
