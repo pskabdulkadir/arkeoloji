@@ -920,15 +920,69 @@ async function generateZinePdf(title: string, text: string): Promise<Buffer> {
 }
 
 // ==========================================
-// MODULE 4: GUMROAD AUTONOMOUS LISTING
-// (Manual endpoints removed - Full automation in pipeline)
+// MODULE 4: GUMROAD MANUAL LISTING
 // ==========================================
 
-// Gumroad listing endpoint - NO-OP (Listing happens automatically in pipeline)
-app.post("/api/products/list-gumroad/:id", async (req, res) => {
-  // Gumroad listing is now fully autonomous in executeOtonomPipeline()
-  // This endpoint is deprecated - button click does nothing
-  res.json({ success: true, message: "Gumroad listing is handled automatically in the pipeline." });
+app.post("/api/products/list-gumroad-manual", async (req, res) => {
+  try {
+    const { productId, title, price_cents, description } = req.body;
+
+    if (!title || !price_cents) {
+      return res.status(400).json({ success: false, error: "Title and price_cents required" });
+    }
+
+    const token = process.env.GUMROAD_API_KEY || "";
+    if (!token) {
+      return res.status(500).json({ success: false, error: "Gumroad API key not configured" });
+    }
+
+    const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(token)}`;
+    const formParams = new URLSearchParams();
+    formParams.append('name', String(title));
+    formParams.append('price_cents', String(price_cents));
+    formParams.append('description', String(description || ""));
+
+    console.log("[MANUAL-GUMROAD] Creating product:", { title, price_cents });
+
+    const gumroadRes = await axios.post(apiUrl, formParams.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 30000
+    });
+
+    if (!gumroadRes.data?.product?.id) {
+      throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes.data)}`);
+    }
+
+    const gumId = gumroadRes.data.product.id;
+    const shortUrl = gumroadRes.data.product.short_url;
+
+    const publishUrl = `https://api.gumroad.com/v2/products/${gumId}/publish?access_token=${encodeURIComponent(token)}`;
+    await axios.put(publishUrl, {}, { timeout: 30000 });
+
+    console.log("[MANUAL-GUMROAD] Product created and published:", shortUrl);
+
+    if (db && productId) {
+      const productRef = doc(db, "products", productId);
+      await setDoc(productRef, {
+        is_listed: true,
+        marketplace_url: shortUrl,
+        listed_at: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    res.json({
+      success: true,
+      message: "Ürün Gumroad'a başarıyla eklendi!",
+      url: shortUrl
+    });
+  } catch (err: any) {
+    console.error("[MANUAL-GUMROAD-ERROR]", err.message, err.response?.data);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      gumroad_error: err.response?.data
+    });
+  }
 });
 
 // ==========================================

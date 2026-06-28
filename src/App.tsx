@@ -142,6 +142,10 @@ export default function App() {
     speed_mode: "STANDARD"
   });
 
+  // Manual Gumroad Form State
+  const [gumroadModalOpen, setGumroadModalOpen] = useState(false);
+  const [gumroadModalData, setGumroadModalData] = useState<{ productId: string; title: string; price: number; description: string } | null>(null);
+
   const handleToggleOtonom = async () => {
     try {
       const nextActive = !otonomSettings.is_active;
@@ -360,18 +364,38 @@ export default function App() {
     }
   };
 
-  // Module 4: Gumroad upload (FULLY AUTONOMOUS - trigger the autonomous pipeline)
+  // Module 4: Gumroad upload (MANUAL - open form for user to edit details before submitting)
   const handleGumroadUpload = async (productId: string) => {
-    setIsListingId(productId);
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      setGumroadModalData({
+        productId: product.id,
+        title: product.title,
+        price: product.price || 25,
+        description: product.description || ""
+      });
+      setGumroadModalOpen(true);
+    }
+  };
+
+  const handleGumroadSubmit = async () => {
+    if (!gumroadModalData) return;
+    setIsListingId(gumroadModalData.productId);
     try {
-      // Trigger the full autonomous pipeline (Wayback -> AI -> Gumroad -> IPFS)
-      console.log("[AUTONOMOUS] Triggering full autonomous pipeline for Gumroad listing");
-      const res = await fetch("/api/otonom/trigger", { method: "POST" });
+      const res = await fetch("/api/products/list-gumroad-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: gumroadModalData.productId,
+          title: gumroadModalData.title,
+          price_cents: Math.round(gumroadModalData.price * 100),
+          description: gumroadModalData.description
+        })
+      });
       if (res.ok) {
-        console.log("[AUTONOMOUS] Pipeline triggered successfully");
         await fetchData();
-      } else {
-        console.error("[AUTONOMOUS] Pipeline trigger failed:", res.status);
+        setGumroadModalOpen(false);
+        setGumroadModalData(null);
       }
     } catch (err) {
       console.error("Gumroad listing error:", err);
@@ -1279,6 +1303,63 @@ export default function App() {
       </main>
 
       {/* FOOTER METADATA */}
+      {/* Manual Gumroad Form Modal */}
+      {gumroadModalOpen && gumroadModalData && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-white mb-4">Gumroad Ürünü Manuel Olarak Oluştur</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-mono text-slate-400">Başlık</label>
+                <input
+                  type="text"
+                  value={gumroadModalData.title}
+                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, title: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-mono text-slate-400">Fiyat ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={gumroadModalData.price}
+                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, price: parseFloat(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-mono text-slate-400">Açıklama</label>
+                <textarea
+                  value={gumroadModalData.description}
+                  onChange={(e) => setGumroadModalData({ ...gumroadModalData, description: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mt-1 h-24"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setGumroadModalOpen(false)}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-mono text-xs transition"
+              >
+                İptal Et
+              </button>
+              <button
+                onClick={handleGumroadSubmit}
+                disabled={isListingId !== null}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white px-4 py-2 rounded font-mono text-xs transition font-bold"
+              >
+                {isListingId ? "Gönderiliyor..." : "Gumroad'a Ekle"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer className="border-t border-slate-900 bg-[#070a14] py-6 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 font-sans">
           <p>© 2026 Siber-Arkeoloji Otonom Satış Botu Projesi. Tüm hakları saklıdır.</p>
