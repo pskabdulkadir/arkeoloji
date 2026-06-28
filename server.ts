@@ -198,6 +198,29 @@ async function seedFirestoreIfNeeded() {
   }
 }
 
+// Helper to clear all collections in Firestore for a fresh start
+async function clearFirestoreDatabase() {
+  if (!db) return;
+  await writeLogToFirestore("warn", "Geliştirme modu aktif: Tüm veritabanı koleksiyonları (artifacts, products, logs) temizleniyor...", "SYSTEM");
+  
+  const collectionsToClear = ["artifacts", "products", "logs"];
+  
+  for (const collectionName of collectionsToClear) {
+    try {
+      const q = query(collection(db, collectionName));
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      querySnapshot.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+      console.log(`Collection '${collectionName}' has been cleared.`);
+    } catch (err) {
+      console.error(`Error clearing collection ${collectionName}:`, err);
+    }
+  }
+}
+
 // Check configuration status
 const getStatus = (): SystemStatus => {
   const hasFirebase = !!db;
@@ -375,7 +398,7 @@ async function executeOtonomPipeline() {
         model: "openai"
       }, { timeout: 30000 });
 
-      const text = typeof aiRes.data === "string" ? aiRes.data : JSON.stringify(aiRes.data);
+      const text = (typeof aiRes.data === 'object' && aiRes.data !== null) ? JSON.stringify(aiRes.data) : String(aiRes.data);
       const cleanJson = text.trim().replace(/^```json/, "").replace(/```$/, "").trim();
       const parsed = JSON.parse(cleanJson);
 
@@ -770,7 +793,7 @@ app.post("/api/artifacts/curate-gemini/:id", async (req, res) => {
         model: "openai"
       }, { timeout: 30000 });
 
-      const text = aiRes.data || "";
+      const text = (typeof aiRes.data === 'object' && aiRes.data !== null) ? JSON.stringify(aiRes.data) : String(aiRes.data || "");
       const cleanJson = text.trim().replace(/^```json/, "").replace(/```$/, "").trim();
       const parsed = JSON.parse(cleanJson);
 
@@ -1042,6 +1065,12 @@ app.post("/api/products/ipfs-archive/:id", async (req, res) => {
 async function startServer() {
   // Seed Firestore if empty on startup
   await seedFirestoreIfNeeded();
+  
+  // DEVELOPMENT ONLY: Clear database on every restart for a clean slate.
+  // WARNING: This will delete all data in artifacts, products, and logs.
+  if (process.env.NODE_ENV !== "production") {
+    await clearFirestoreDatabase();
+  }
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
