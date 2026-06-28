@@ -444,6 +444,8 @@ async function executeOtonomPipeline() {
     }
     await writeLogToFirestore("info", `Otonom Adım 2 Başarılı: Eser '${resultTitle}' (${selectedType}) kürasyonu tamamlandı ve kaydedildi.`, "SYSTEM");
 
+    console.log("[STEP-2-DONE] Adım 2 tamamlandı, Firestore yazması bekleniyordu şimdiye kadar?");
+
     // Adım 3: Gumroad Otonom Entegrasyonu (Doğru Parametre Formatı ile)
     console.log("[STEP-3-START] Adım 3 başlıyor...");
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API otonom çağrısı başlatılıyor...`, "SYSTEM");
