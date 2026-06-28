@@ -425,59 +425,22 @@ async function executeOtonomPipeline() {
     }
     await writeLogToFirestore("info", `Otonom Adım 2 Başarılı: Eser '${resultTitle}' (${selectedType}) kürasyonu tamamlandı ve kaydedildi.`, "SYSTEM");
 
-    // Adım 3: Gumroad Otonom Entegrasyonu ve Yayına Alma
-    let finalMarketplaceUrl = "";
-    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
-    const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
+    // Adım 3: Gumroad Manuel Listeleme (Webhook Akışı)
+    await writeLogToFirestore("info", `Otonom Adım 3: Gumroad manuel listeleme akışına geçiliyor. Ürün verisi hazırlandı.`, "SYSTEM");
 
-    // --- GUMROAD DIRECT OBJECT POST ---
-    const gumroadData = {
-      name: String(artifact.name || "Siber Antika"),
-      price_cents: 990,
-      description: String(artifact.description || "Cyber-Archeologist Series")
-    };
+    // Ürün hazır durumda kaydedilir, manuel olarak Gumroad'da oluşturulması beklenilir
+    newProduct.is_listed = false;
+    newProduct.marketplace_url = "";
 
-    console.log("[DIRECT-POST] Gumroad'a obje gönderiliyor:", gumroadData);
-
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', gumroadData, {
-      headers: {
-        "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
-      },
-      timeout: 30000
-    });
-
-    if (!gumroadRes?.data?.product?.short_url || !gumroadRes?.data?.product?.id) {
-      throw new Error(`Gumroad API eksik veri döndürdü: ${JSON.stringify(gumroadRes?.data || {})}`);
-    }
-
-    finalMarketplaceUrl = gumroadRes.data.product.short_url;
-
-    const gumId = gumroadRes.data.product.id;
-    if (gumId) {
-      try {
-        await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
-          timeout: 30000,
-          headers: {
-            "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
-          }
-        });
-        await writeLogToFirestore("info", `Otonom Adım 3.1 Başarılı: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
-      } catch (pubErr: any) {
-        await writeLogToFirestore("warn", `Gumroad publish hatası (kritik değil): ${pubErr.message}`, "SYSTEM");
-      }
-    }
-
-    newProduct.is_listed = true;
-    newProduct.marketplace_url = finalMarketplaceUrl;
-
-    artifact.is_listed = true;
-    artifact.status = "listed";
+    artifact.is_analyzed = true;
+    artifact.status = "analyzed";
 
     if (db) {
       await setDoc(doc(db, "products", productId), newProduct);
       await setDoc(doc(db, "artifacts", artifact.id), artifact);
     }
-    await writeLogToFirestore("info", `Otonom Adım 3 Başarılı: Gumroad listelendi ve yayında -> ${finalMarketplaceUrl}`, "SYSTEM");
+
+    await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${newProduct.title}' Gumroad manuel listeleme için hazırlandı. Bağlantı: /api/products/export-gumroad/${productId}`, "SYSTEM");
 
     // Adım 4: IPFS Merkezsiz Arşivleme
     await writeLogToFirestore("info", `Otonom Adım 4: IPFS merkezsiz arşivleme işlemi başlatılıyor...`, "SYSTEM");
@@ -864,8 +827,106 @@ async function generateZinePdf(title: string, text: string): Promise<Buffer> {
 }
 
 // ==========================================
-// MODULE 4: GUMROAD AUTOMATED LISTING
+// MODULE 4: GUMROAD WEBHOOK & MANUAL LISTING
 // ==========================================
+
+// Endpoint to get product data for manual Gumroad listing
+app.get("/api/products/export-gumroad/:id", async (req, res) => {
+  const productId = req.params.id;
+  if (!db) {
+    return res.status(500).json({ error: "Veritabanı bağlantısı yok." });
+  }
+
+  try {
+    const prodDoc = await getDoc(doc(db, "products", productId));
+    if (!prodDoc.exists()) {
+      return res.status(404).json({ error: "Ürün bulunamadı." });
+    }
+
+    const product = prodDoc.data() as Product;
+
+    const exportData = {
+      id: product.id,
+      title: product.title,
+      description: product.description,
+      price: product.price,
+      price_cents: Math.round(product.price * 100),
+      image_url: product.image_url,
+      tags: product.tags || [],
+      product_type: product.product_type,
+
+      // İçerik tipine göre ekstra alanlar
+      code_content: (product as any).code_content || "",
+      pdf_content_text: (product as any).pdf_content_text || "",
+      prompt_package: (product as any).prompt_package || "",
+      game_code: (product as any).game_code || "",
+      synth_code: (product as any).synth_code || "",
+
+      // Yönerge: Kullanıcı bu verilerle Gumroad web arayüzünde manuel ürün oluşturacak
+      instructions: {
+        step1: "Gumroad web arayüzünde yeni ürün oluştur",
+        step2: "Yukarıdaki title, description ve price_cents değerlerini kopyala",
+        step3: "Ürünü oluşturduktan sonra bu webhookun short_url'ini gönder",
+        webhook_url: `${req.protocol}://${req.get('host')}/api/webhooks/gumroad-created`
+      }
+    };
+
+    await writeLogToFirestore("info", `Gumroad manuel listeleme verisi hazırlandı: ${product.title}`, "MARKETPLACE");
+    res.json(exportData);
+
+  } catch (error: any) {
+    await writeLogToFirestore("error", `Gumroad Export Hatası: ${error.message}`, "MARKETPLACE");
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Webhook to receive Gumroad product creation confirmation
+app.post("/api/webhooks/gumroad-created", async (req, res) => {
+  const { product_id, short_url, gumroad_product_id } = req.body;
+
+  if (!product_id || !short_url) {
+    return res.status(400).json({ error: "product_id ve short_url gereklidir." });
+  }
+
+  if (!db) {
+    return res.status(500).json({ error: "Veritabanı bağlantısı yok." });
+  }
+
+  try {
+    const prodDoc = await getDoc(doc(db, "products", product_id));
+    if (!prodDoc.exists()) {
+      return res.status(404).json({ error: "Ürün bulunamadı." });
+    }
+
+    const product = prodDoc.data() as Product;
+
+    // Ürün Gumroad'da oluşturuldığını kaydet
+    product.is_listed = true;
+    product.marketplace_url = short_url;
+    (product as any).gumroad_product_id = gumroad_product_id || "";
+
+    // Artifact'ı da güncelle
+    const artDoc = await getDoc(doc(db, "artifacts", product.artifact_id));
+    if (artDoc.exists()) {
+      const artifact = artDoc.data() as Artifact;
+      artifact.is_listed = true;
+      artifact.status = "listed";
+      await setDoc(doc(db, "artifacts", product.artifact_id), artifact);
+    }
+
+    // Ürünü kaydet
+    await setDoc(doc(db, "products", product_id), product);
+
+    await writeLogToFirestore("info", `Gumroad webhook tetiklendi: Ürün '${product.title}' yayında -> ${short_url}`, "MARKETPLACE");
+    res.json({ success: true, product, message: "Gumroad ürün başarıyla sistemde kaydedildi." });
+
+  } catch (error: any) {
+    await writeLogToFirestore("error", `Gumroad Webhook Hatası: ${error.message}`, "MARKETPLACE");
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual Gumroad listing trigger (User-initiated)
 app.post("/api/products/list-gumroad/:id", async (req, res) => {
   const productId = req.params.id;
   if (!db) {
@@ -879,82 +940,37 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
     }
 
     const product = prodDoc.data() as Product;
-    await writeLogToFirestore("info", `Gumroad otonom API yükleme döngüsü tetiklendi: ${product.title} (${product.product_type})`, "MARKETPLACE");
 
-    // Adım 2: Wayback Machine üzerindeki orijinal canlı görsel URL'sini doğrudan pazar yerine ilet
-    const storageUrl = await getDirectImageUrl(product.image_url, product.id);
+    // Webhook tarafından manuel olarak oluşturulmış mı kontrol et
+    if (product.is_listed && product.marketplace_url) {
+      await writeLogToFirestore("info", `Ürün zaten Gumroad'da listelenmişti: ${product.marketplace_url}`, "MARKETPLACE");
+      return res.json({ success: true, already_listed: true, product });
+    }
 
-    let targetLink = "";
+    // Manuel listeleme yönergeleri gönder
+    const exportUrl = `${req.protocol}://${req.get('host')}/api/products/export-gumroad/${productId}`;
+    await writeLogToFirestore("info", `Gumroad manuel listeleme akışı tetiklendi: ${product.title}. Export URL: ${exportUrl}`, "MARKETPLACE");
 
-    try {
-      const nihaiTemizPayload = {
-        name: String(product.title || "Retro Hardware"),
-        price_cents: 990,
-        description: String(product.description || "Cyber-Archeologist Series")
-      };
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // --- GUMROAD DIRECT OBJECT POST ---
-      const gumroadData = {
-        name: String(product.title || "Siber Antika"),
-        price_cents: 990,
-        description: String(product.description || "Cyber-Archeologist Series")
-      };
-
-      console.log("[DIRECT-POST] Gumroad'a obje gönderiliyor:", gumroadData);
-
-      const response = await axios.post('https://api.gumroad.com/v2/products', gumroadData, {
-        headers: {
-          "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
-        },
-        timeout: 30000
-      });
-
-      if (response.data?.product?.short_url && response.data?.product?.id) {
-        targetLink = response.data.product.short_url;
-        const gumId = response.data.product.id;
-        if (gumId) {
-          try {
-            await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
-              timeout: 30000,
-              headers: {
-                "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`
-              }
-            });
-            await writeLogToFirestore("info", `Gumroad ürünü yayına alındı (PUBLISHED)`, "MARKETPLACE");
-          } catch (pubErr: any) {
-            await writeLogToFirestore("warn", `Gumroad publish hatası: ${pubErr.message}`, "MARKETPLACE");
-          }
-        }
-        await writeLogToFirestore("info", `Gumroad API listeleme başarılı! Ürün satışta: ${targetLink}`, "MARKETPLACE");
-      } else {
-        await writeLogToFirestore("error", `Gumroad API yanıt döndü ama short_url eksik. Yanıt: ${JSON.stringify(response.data)}`, "MARKETPLACE");
+    res.json({
+      success: false,
+      message: "Gumroad'da ürün oluşturma manuel olmalıdır. Aşağıdaki adımları takip edin:",
+      steps: [
+        "1. Gumroad web arayüzüne (https://gumroad.com) git",
+        "2. Yeni ürün oluştur ve bu bilgileri gir:",
+        "   - Title: " + product.title,
+        "   - Description: " + product.description.substring(0, 100) + "...",
+        "   - Price: $" + product.price.toFixed(2),
+        "3. Ürünü oluşturduktan sonra Gumroad bağlantısını gönder:",
+        "   POST /api/webhooks/gumroad-created ile { product_id: '" + productId + "', short_url: '...gumroad.com/... bağlantı' }"
+      ],
+      export_url: exportUrl,
+      product: {
+        id: product.id,
+        title: product.title,
+        description: product.description.substring(0, 200),
+        price: "$" + product.price.toFixed(2)
       }
-    } catch (gumErr: any) {
-      await writeLogToFirestore("error", `Gumroad API sorgulaması başarısız: ${gumErr.message}. Status: ${gumErr.response?.status || 'N/A'}. Yanıt: ${JSON.stringify(gumErr.response?.data || {})}`, "MARKETPLACE");
-      targetLink = "";
-    }
-
-    product.is_listed = targetLink ? true : false;
-    product.marketplace_url = targetLink;
-
-    const artDoc = await getDoc(doc(db, "artifacts", product.artifact_id));
-    if (artDoc.exists()) {
-      const artifact = artDoc.data() as Artifact;
-      artifact.is_listed = targetLink ? true : false;
-      artifact.status = targetLink ? "listed" : "analyzed";
-      await setDoc(doc(db, "artifacts", product.artifact_id), artifact);
-    }
-
-    await setDoc(doc(db, "products", productId), product);
-
-    if (targetLink) {
-      await writeLogToFirestore("info", `Ürün başarıyla yayına alındı: ${product.title}`, "SYSTEM");
-      res.json({ success: true, product });
-    } else {
-      res.json({ success: false, error: "Gumroad API kullanılamıyor", product });
-    }
+    });
 
   } catch (error: any) {
     await writeLogToFirestore("error", `Gumroad Listeleme Hatası: ${error.message}`, "MARKETPLACE");
