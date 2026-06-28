@@ -431,17 +431,11 @@ async function executeOtonomPipeline() {
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
     // --- GUMROAD FORM POST - ELLE QUERY STRING ---
-    const gumroadParams = {
-      name: String(artifact.name || "Siber Antika"),
-      price_cents: 990,
-      description: String(artifact.description || "Cyber-Archeologist Series")
-    };
+    const name = String(artifact.name || "Siber Antika");
+    const description = String(artifact.description || "Cyber-Archeologist Series");
+    const queryString = `name=${encodeURIComponent(name)}&price_cents=990&description=${encodeURIComponent(description)}`;
 
-    const queryString = Object.keys(gumroadParams)
-      .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(gumroadParams[key])))
-      .join('&');
-
-    console.log("[FINAL-FIX] Gumroad'a elle oluşturulan query string basılıyor:", queryString.substring(0, 100) + "...");
+    console.log("[FINAL-FIX] Query string:", queryString);
 
     const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', queryString, {
       headers: {
@@ -901,17 +895,11 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // --- GUMROAD FORM POST - ELLE QUERY STRING ---
-      const gumroadParams = {
-        name: String(product.title || "Siber Antika"),
-        price_cents: 990,
-        description: String(product.description || "Cyber-Archeologist Series")
-      };
+      const name = String(product.title || "Siber Antika");
+      const description = String(product.description || "Cyber-Archeologist Series");
+      const queryString = `name=${encodeURIComponent(name)}&price_cents=990&description=${encodeURIComponent(description)}`;
 
-      const queryString = Object.keys(gumroadParams)
-        .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(gumroadParams[key])))
-        .join('&');
-
-      console.log("[FINAL-FIX] Gumroad'a elle oluşturulan query string basılıyor!");
+      console.log("[FINAL-FIX] Query string:", queryString);
 
       const response = await axios.post('https://api.gumroad.com/v2/products', queryString, {
         headers: {
