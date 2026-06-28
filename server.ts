@@ -330,6 +330,27 @@ async function executeOtonomPipeline() {
     return;
   }
 
+  // GUMROAD API HIZ LİMİTİ KORUMASI
+  try {
+    const q = query(collection(db, "products"), orderBy("created_at", "desc"), limit(1));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      const lastProduct = snapshot.docs[0].data() as Product;
+      const lastCreationDate = new Date(lastProduct.created_at);
+      const now = new Date();
+      // Gumroad'un günlük 10 ürün limitini (yaklaşık 2.4 saatte bir ürün) aşmamak için güvenli bir aralık (3 saat) belirliyoruz.
+      const hoursSinceLastCreation = (now.getTime() - lastCreationDate.getTime()) / (1000 * 60 * 60);
+      
+      if (lastProduct.is_listed && hoursSinceLastCreation < 3) {
+        await writeLogToFirestore("warn", `Gumroad API hız limiti koruması: Son 3 saat içinde zaten bir ürün listelendi. Bu otonom döngü atlanıyor.`, "SYSTEM");
+        return; // Boru hattını çalıştırmadan çık
+      }
+    }
+  } catch (checkErr: any) {
+    // Bu kontrol sırasında bir hata olursa, sadece logla ve devam et. Ana işlevi durdurma.
+    await writeLogToFirestore("error", `Gumroad hız limiti kontrolü sırasında hata: ${checkErr.message}`, "SYSTEM");
+  }
+
   await writeLogToFirestore("info", "OTONOM BORU HATTI TETİKLENDİ: Wayback Scraper, Gemini Küratörü, Gumroad ve IPFS akışı başlıyor...", "SYSTEM");
   try {
     // Adım 1: Wayback Machine Üzerinden Siber-Antika Kazı
@@ -538,7 +559,7 @@ async function executeOtonomPipeline() {
       newProduct.marketplace_url = "";
       artifact.is_analyzed = true;
       artifact.status = "analyzed";
-      throw gumErr;
+      return; // Hata durumunda boru hattını güvenli bir şekilde sonlandır, çökme.
     }
 
     if (db) {
