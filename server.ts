@@ -460,19 +460,21 @@ async function executeOtonomPipeline() {
       formParams.append('name', String(newProduct.title || "Siber Antika"));
       formParams.append('price_cents', String(Math.round(newProduct.price * 100)));
       formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
-      formParams.append('access_token', process.env.GUMROAD_API_KEY || "");
 
       console.log("[STEP-3-PAYLOAD] Gumroad payload hazır, API çağrısı yapılıyor...");
       console.log("[STEP-3-TOKEN-CHECK] Token length:", (process.env.GUMROAD_API_KEY || "").length);
 
-      const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+      const apiUrl = `https://api.gumroad.com/v2/products?access_token=${encodeURIComponent(process.env.GUMROAD_API_KEY || "")}`;
+      console.log("[STEP-3-URL] API URL (token masked):", apiUrl.replace(process.env.GUMROAD_API_KEY || "", "***TOKEN***"));
+
+      const gumroadRes = await axios.post(apiUrl, formParams.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         },
         timeout: 30000
       });
 
-      console.log("[STEP-3-RESPONSE] Gumroad cevap alındı:", JSON.stringify(gumroadRes.data).substring(0, 200));
+      console.log("[STEP-3-RESPONSE] Gumroad cevap alındı:", JSON.stringify(gumroadRes.data));
 
       if (gumroadRes?.data?.product?.short_url && gumroadRes?.data?.product?.id) {
         finalMarketplaceUrl = gumroadRes.data.product.short_url;
@@ -482,14 +484,10 @@ async function executeOtonomPipeline() {
         console.log("[STEP-3-PUBLISH-START] Publish işlemi başlıyor, ID:", gumId);
 
         try {
-          const publishParams = new URLSearchParams();
-          publishParams.append('access_token', process.env.GUMROAD_API_KEY || "");
+          const publishUrl = `https://api.gumroad.com/v2/products/${gumId}/publish?access_token=${encodeURIComponent(process.env.GUMROAD_API_KEY || "")}`;
 
-          await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, publishParams.toString(), {
-            timeout: 30000,
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
+          await axios.put(publishUrl, {}, {
+            timeout: 30000
           });
           console.log("[STEP-3-PUBLISH-SUCCESS] Yayına alındı!");
           await writeLogToFirestore("info", `Otonom Adım 3.1: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
