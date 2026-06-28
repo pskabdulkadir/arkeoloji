@@ -308,7 +308,13 @@ export default function App() {
       return;
     }
     // Validate custom credentials or fallback
-    if (password === "cyberarch2026") {
+    // UYARI: Bu yöntem geliştirme için geçici bir çözümdür.
+    // Gerçek bir uygulamada kullanıcı bilgileri asla koda gömülmemelidir.
+    // Güvenli bir kimlik doğrulama sistemi (örn: Firebase Auth) kullanılmalıdır.
+    if (
+      (email === "psikologabdulkadirkan@gmail.com" && password === "Abdulkadir1983") ||
+      password === "cyberarch2026"
+    ) {
       setIsAuthenticated(true);
       setAuthError("");
     } else {
