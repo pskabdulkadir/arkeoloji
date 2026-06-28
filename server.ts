@@ -591,112 +591,123 @@ async function executeOtonomPipeline() {
     if (availablePlatforms.length === 0) {
       await writeLogToFirestore("warn", "Hiçbir satış platformu (Gumroad, Lemon Squeezy) yapılandırılmamış. Adım 3 atlanıyor.", "MARKETPLACE");
     } else {
-      const chosenPlatform = availablePlatforms[Math.floor(Math.random() * availablePlatforms.length)];
-      await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${chosenPlatform}' platformunda listelenmek üzere seçildi.`, "MARKETPLACE");
-      
-      try {
-        if (chosenPlatform === "Gumroad") {
-          const price = newProduct.price || 25;
-          const priceCents = Math.round(price * 100);
-          const token = process.env.GUMROAD_API_KEY || "";
+      let listedSuccessfully = false;
+      // Platformları rastgele bir sırayla dene
+      const shuffledPlatforms = availablePlatforms.sort(() => 0.5 - Math.random());
 
-          const productData = {
-            name: String(newProduct.title || "Siber Antika"),
-            price: priceCents,
-            description: String(newProduct.description || "Cyber-Archeologist Series"),
-          };
+      for (const platform of shuffledPlatforms) {
+        if (listedSuccessfully) break;
 
-          const response = await axios.post('https://api.gumroad.com/v2/products', productData, {
-            headers: { 'Authorization': `Bearer ${token}` },
-            timeout: 30000
-          });
+        await writeLogToFirestore("info", `Otonom Adım 3: Ürün '${platform}' platformunda listelenmek üzere deneniyor...`, "MARKETPLACE");
+        try {
+          if (platform === "Gumroad") {
+            const price = newProduct.price || 25;
+            const priceCents = Math.round(price * 100);
+            const token = process.env.GUMROAD_API_KEY || "";
 
-          if (!response.data?.product?.id || !response.data?.product?.short_url) {
-            throw new Error(`Gumroad API returned invalid response: ${JSON.stringify(response.data)}`);
-          }
+            const productData = {
+              name: String(newProduct.title || "Siber Antika"),
+              price: priceCents,
+              description: String(newProduct.description || "Cyber-Archeologist Series"),
+            };
 
-          finalMarketplaceUrl = response.data.product.short_url;
-          const gumId = response.data.product.id;
-
-          try {
-            await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
+            const response = await axios.post('https://api.gumroad.com/v2/products', productData, {
               headers: { 'Authorization': `Bearer ${token}` },
               timeout: 30000
             });
-          } catch (pubErr: any) {
-            console.log("[GUMROAD-PUBLISH-WARN]", pubErr.message);
+
+            if (!response.data?.product?.id || !response.data?.product?.short_url) {
+              throw new Error(`Gumroad API returned invalid response: ${JSON.stringify(response.data)}`);
+            }
+
+            finalMarketplaceUrl = response.data.product.short_url;
+            const gumId = response.data.product.id;
+
+            try {
+              await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
+                headers: { 'Authorization': `Bearer ${token}` },
+                timeout: 30000
+              });
+            } catch (pubErr: any) {
+              console.log("[GUMROAD-PUBLISH-WARN]", pubErr.message);
+            }
+          } else if (platform === "LemonSqueezy") {
+            const token = process.env.LEMONSQUEEZY_API_KEY!;
+            const storeId = process.env.LEMONSQUEEZY_STORE_ID!;
+            const price = newProduct.price || 25;
+            const priceCents = Math.round(price * 100);
+
+            const headers = {
+              'Accept': 'application/vnd.api+json',
+              'Content-Type': 'application/vnd.api+json',
+              'Authorization': `Bearer ${token}`
+            };
+
+            // 1. Create Product
+            const productResponse = await axios.post('https://api.lemonsqueezy.com/v1/products', {
+              data: {
+                type: 'products',
+                attributes: {
+                  name: newProduct.title,
+                  description: newProduct.description,
+                },
+                relationships: {
+                  store: {
+                    data: {
+                      type: 'stores',
+                      id: storeId
+                    }
+                  }
+                }
+              }
+            }, { headers, timeout: 30000 });
+
+            const lemonProductId = productResponse.data.data.id;
+
+            // 2. Create Variant (Price)
+            const variantResponse = await axios.post('https://api.lemonsqueezy.com/v1/variants', {
+              data: {
+                type: 'variants',
+                attributes: {
+                  name: "Standard License",
+                  price: priceCents,
+                  is_subscription: false,
+                },
+                relationships: {
+                  product: {
+                    data: {
+                      type: 'products',
+                      id: lemonProductId
+                    }
+                  }
+                }
+              }
+            }, { headers, timeout: 30000 });
+
+            finalMarketplaceUrl = variantResponse.data.data.attributes.buy_now_url;
+          } else if (platform === "Etsy") {
+            // ETSY ENTEGRASYONU İÇİN YER TUTUCU
+            throw new Error("Etsy entegrasyonu henüz tamamlanmadı.");
           }
-        } else if (chosenPlatform === "LemonSqueezy") {
-          const token = process.env.LEMONSQUEEZY_API_KEY!;
-          const storeId = process.env.LEMONSQUEEZY_STORE_ID!;
-          const price = newProduct.price || 25;
-          const priceCents = Math.round(price * 100);
 
-          const headers = {
-            'Accept': 'application/vnd.api+json',
-            'Content-Type': 'application/vnd.api+json',
-            'Authorization': `Bearer ${token}`
-          };
+          listedSuccessfully = true;
+          newProduct.is_listed = true;
+          newProduct.marketplace_url = finalMarketplaceUrl;
+          artifact.is_listed = true;
+          artifact.status = "listed";
 
-          // 1. Create Product
-          const productResponse = await axios.post('https://api.lemonsqueezy.com/v1/products', {
-            data: {
-              type: 'products',
-              attributes: {
-                name: newProduct.title,
-                description: newProduct.description,
-              },
-              relationships: {
-                store: {
-                  data: {
-                    type: 'stores',
-                    id: storeId
-                  }
-                }
-              }
-            }
-          }, { headers, timeout: 30000 });
+          console.log(`[${platform.toUpperCase()}-SUCCESS] Product listed: ${finalMarketplaceUrl}`);
+          await writeLogToFirestore("info", `Otonom Adım 3 BAŞARIYLI (${platform}): ${finalMarketplaceUrl}`, "MARKETPLACE");
 
-          const lemonProductId = productResponse.data.data.id;
-
-          // 2. Create Variant (Price)
-          const variantResponse = await axios.post('https://api.lemonsqueezy.com/v1/variants', {
-            data: {
-              type: 'variants',
-              attributes: {
-                name: "Standard License",
-                price: priceCents,
-                is_subscription: false,
-              },
-              relationships: {
-                product: {
-                  data: {
-                    type: 'products',
-                    id: lemonProductId
-                  }
-                }
-              }
-            }
-          }, { headers, timeout: 30000 });
-
-          finalMarketplaceUrl = variantResponse.data.data.attributes.buy_now_url;
-        } else if (chosenPlatform === "Etsy") {
-          // ETSY ENTEGRASYONU İÇİN YER TUTUCU
-          // API anahtarları .env dosyasına eklendiğinde bu bölüm doldurulacak.
-          throw new Error("Etsy entegrasyonu henüz tamamlanmadı. API anahtarları eklendikten sonra bu bölüm kodlanacak.");
+        } catch (listingErr: any) {
+          console.error(`[${platform.toUpperCase()}-CRITICAL]`, listingErr.message, listingErr.response?.data || "");
+          await writeLogToFirestore("error", `Otonom Adım 3 HATASI (${platform}): ${listingErr.message}`, "MARKETPLACE");
+          // Eğer bu platformda hata alınırsa, döngü bir sonraki platformu deneyecek.
         }
+      }
 
-        newProduct.is_listed = true;
-        newProduct.marketplace_url = finalMarketplaceUrl;
-        artifact.is_listed = true;
-        artifact.status = "listed";
-
-        console.log(`[${chosenPlatform.toUpperCase()}-SUCCESS] Product listed: ${finalMarketplaceUrl}`);
-        await writeLogToFirestore("info", `Otonom Adım 3 BAŞARIYLI (${chosenPlatform}): ${finalMarketplaceUrl}`, "MARKETPLACE");
-
-      } catch (listingErr: any) {
-        console.error(`[${chosenPlatform.toUpperCase()}-CRITICAL]`, listingErr.message, listingErr.response?.data || "");
-        await writeLogToFirestore("error", `Otonom Adım 3 HATASI (${chosenPlatform}): ${listingErr.message}`, "MARKETPLACE");
+      if (!listedSuccessfully) {
+        await writeLogToFirestore("error", `Otonom Adım 3 HATASI: Tüm platformlarda listeleme denemeleri başarısız oldu.`, "SYSTEM");
         newProduct.is_listed = false;
         newProduct.marketplace_url = "";
         artifact.is_analyzed = true;
