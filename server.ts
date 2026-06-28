@@ -455,13 +455,13 @@ async function executeOtonomPipeline() {
       formParams.append('name', String(newProduct.title || "Siber Antika"));
       formParams.append('price_cents', String(Math.round(newProduct.price * 100))); // Basit format
       formParams.append('description', String(newProduct.description || "Cyber-Archeologist Series"));
+      formParams.append('access_token', process.env.GUMROAD_API_KEY || "");
 
       console.log("[AUTOMATION-ENFORCED] Manuel form iptal edildi. Otonom API tetikleniyor...");
       console.log("[GUMROAD-REQUEST] Payload:", formParams.toString());
 
       const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
         headers: {
-          'Authorization': `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
           'Content-Type': 'application/x-www-form-urlencoded'
         },
         timeout: 30000
@@ -475,10 +475,13 @@ async function executeOtonomPipeline() {
 
         const gumId = gumroadRes.data.product.id;
         try {
-          await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, {}, {
+          const publishParams = new URLSearchParams();
+          publishParams.append('access_token', process.env.GUMROAD_API_KEY || "");
+
+          await axios.put(`https://api.gumroad.com/v2/products/${gumId}/publish`, publishParams.toString(), {
             timeout: 30000,
             headers: {
-              'Authorization': `Bearer ${process.env.GUMROAD_API_KEY || ""}`
+              'Content-Type': 'application/x-www-form-urlencoded'
             }
           });
           await writeLogToFirestore("info", `Otonom Adım 3.1: Gumroad ürünü otomatik olarak YAYINA ALINDI (PUBLISHED).`, "SYSTEM");
