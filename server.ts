@@ -430,18 +430,23 @@ async function executeOtonomPipeline() {
     await writeLogToFirestore("info", `Otonom Adım 3: Gumroad v2 API (/v2/products) canlı uç noktasına istek gönderiliyor...`, "SYSTEM");
     const storageUrl = await getDirectImageUrl(newProduct.image_url, newProduct.id);
 
-    // --- GUMROAD FORM POST ENFORCED ---
-    const formParams = new URLSearchParams();
-    formParams.append('name', String(artifact.name || "Siber Antika"));
-    formParams.append('price_cents', '990');
-    formParams.append('description', String(artifact.description || "Cyber-Archeologist Series"));
+    // --- GUMROAD FORM POST - ELLE QUERY STRING ---
+    const gumroadParams = {
+      name: String(artifact.name || "Siber Antika"),
+      price_cents: 990,
+      description: String(artifact.description || "Cyber-Archeologist Series")
+    };
 
-    console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi (object direkt) basılıyor!");
+    const queryString = Object.keys(gumroadParams)
+      .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(gumroadParams[key])))
+      .join('&');
 
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams, {
+    console.log("[FINAL-FIX] Gumroad'a elle oluşturulan query string basılıyor:", queryString.substring(0, 100) + "...");
+
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', queryString, {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
       },
       timeout: 30000
     });
@@ -895,18 +900,23 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // --- GUMROAD FORM POST ENFORCED ---
-      const formParams = new URLSearchParams();
-      formParams.append('name', String(product.title || "Siber Antika"));
-      formParams.append('price_cents', '990');
-      formParams.append('description', String(product.description || "Cyber-Archeologist Series"));
+      // --- GUMROAD FORM POST - ELLE QUERY STRING ---
+      const gumroadParams = {
+        name: String(product.title || "Siber Antika"),
+        price_cents: 990,
+        description: String(product.description || "Cyber-Archeologist Series")
+      };
 
-      console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi (object direkt) basılıyor!");
+      const queryString = Object.keys(gumroadParams)
+        .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(gumroadParams[key])))
+        .join('&');
 
-      const response = await axios.post('https://api.gumroad.com/v2/products', formParams, {
+      console.log("[FINAL-FIX] Gumroad'a elle oluşturulan query string basılıyor!");
+
+      const response = await axios.post('https://api.gumroad.com/v2/products', queryString, {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
-          "Content-Type": "application/x-www-form-urlencoded"
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
         },
         timeout: 30000
       });
