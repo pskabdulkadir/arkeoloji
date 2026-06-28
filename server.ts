@@ -436,9 +436,9 @@ async function executeOtonomPipeline() {
     formParams.append('price_cents', '990');
     formParams.append('description', String(artifact.description || "Cyber-Archeologist Series"));
 
-    console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi basılıyor!");
+    console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi (object direkt) basılıyor!");
 
-    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+    const gumroadRes = await axios.post('https://api.gumroad.com/v2/products', formParams, {
       headers: {
         "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
         "Content-Type": "application/x-www-form-urlencoded"
@@ -901,9 +901,9 @@ app.post("/api/products/list-gumroad/:id", async (req, res) => {
       formParams.append('price_cents', '990');
       formParams.append('description', String(product.description || "Cyber-Archeologist Series"));
 
-      console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi basılıyor!");
+      console.log("[FORCE-POST] Gumroad'a URL-Encoded Form verisi (object direkt) basılıyor!");
 
-      const response = await axios.post('https://api.gumroad.com/v2/products', formParams.toString(), {
+      const response = await axios.post('https://api.gumroad.com/v2/products', formParams, {
         headers: {
           "Authorization": `Bearer ${process.env.GUMROAD_API_KEY || ""}`,
           "Content-Type": "application/x-www-form-urlencoded"
